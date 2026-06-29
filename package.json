@@ -1,34 +1,40 @@
 {
   "name": "sw-mesh-viewer",
-  "type": "module",
   "version": "0.1.0",
   "description": "Stormworks mesh parser and viewer.",
-  "author": "Teinishi",
-  "license": "MIT",
   "homepage": "https://github.com/Teinishi/sw-mesh-viewer#readme",
+  "license": "MIT",
+  "author": "Teinishi",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Teinishi/sw-mesh-viewer.git"
   },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "release": "bumpp",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "npm run build",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
+    "oxfmt": "^0.56.0",
+    "oxlint": "^1.71.0",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
