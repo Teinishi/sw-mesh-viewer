@@ -1,11 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { MeshData } from "../parser";
-
-const AMBIENT_COLOR_HIGH = new THREE.Color(118.0 / 255.0, 142.0 / 255.0, 190.0 / 255.0);
-const AMBIENT_COLOR_LOW = new THREE.Color(11.0 / 255.0, 16.0 / 255.0, 44.0 / 255.0);
-const SKY_COLOR_UP = new THREE.Color(0.0, 61.0 / 255.0, 182.0 / 255.0);
-const SKY_COLOR_DOWN = new THREE.Color(139.0 / 255.0, 210.0 / 255.0, 207.0 / 255.0);
+import {
+  AMBIENT_COLOR_HIGH,
+  AMBIENT_COLOR_LOW,
+  //createAdditiveMaterial,
+  //createGlassMaterial,
+  createOpaqueMaterial,
+} from "./shaders";
 
 export interface ViewerOptions {
   antialias?: boolean;
@@ -24,7 +25,7 @@ export class Viewer {
   readonly camera: THREE.PerspectiveCamera;
 
   private meshObject?: THREE.Object3D;
-  private wireframe = false;
+  private wireframe = false; // TODO: 消すか残すか検討
   private backgroundColor: number | null;
   private controls?: OrbitControls;
   private renderLoopId?: number;
@@ -129,13 +130,14 @@ export class Viewer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  loadMesh(mesh: MeshData | null | undefined): void {
+  loadMesh(mesh: null | undefined): void {
     void mesh;
     this.clear();
 
-    // 仮で立方体
+    // TODO: 仮で立方体を表示しているが、mesh を読み込むようにする
     const geometry = new THREE.BoxGeometry(1, 1, 1);
 
+    // 立方体の全頂点に仮の色を割り当て
     geometry.setAttribute(
       "color",
       new THREE.BufferAttribute(
@@ -144,52 +146,7 @@ export class Viewer {
       ),
     );
 
-    const material = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      color: 0xffffff,
-      roughness: 1.0,
-      metalness: 0.0,
-      wireframe: this.wireframe,
-    });
-
-    material.onBeforeCompile = (shader) => {
-      // 特定の頂点カラーを置き換える
-      shader.uniforms.overrideColor1 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
-      shader.uniforms.overrideColor2 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
-      shader.uniforms.overrideColor3 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
-      shader.uniforms.overrideColor = { value: 1 };
-
-      shader.vertexShader = shader.vertexShader
-        .replace(
-          "#include <common>",
-          `#include <common>
-uniform vec4 overrideColor1;
-uniform vec4 overrideColor2;
-uniform vec4 overrideColor3;
-uniform int overrideColor;`,
-        )
-        .replace(
-          "#include <color_vertex>",
-          `#ifdef USE_COLOR
-vColor.xyz = color.xyz;
-if (overrideColor == 1) {
-  if (distance(color.rgb, vec3(1.0, 0.494, 0.0)) < 0.01) vColor = overrideColor1;
-  else if (distance(color.rgb, vec3(0.608, 0.494, 0.0)) < 0.01) vColor = overrideColor2;
-  else if (distance(color.rgb, vec3(0.216, 0.494, 0.0)) < 0.01) vColor = overrideColor3;
-}
-#endif`,
-        );
-
-      // カメラ至近の補助ライト
-      shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <aomap_fragment>",
-        `#include <aomap_fragment>
-float dist = length(vViewPosition);
-float incidence = max(dot(geometryNormal, geometryViewDir), 0.0);
-float distanceFactor = 0.05 * (1.0 / max(0.01, dist) - 1.0 / 100.0);
-reflectedLight.directDiffuse += diffuseColor.rgb * incidence * distanceFactor * 16.0;`,
-      );
-    };
+    const material = createOpaqueMaterial();
 
     this.meshObject = new THREE.Mesh(geometry, material);
     this.meshObject.position.set(0, 0, 0);
