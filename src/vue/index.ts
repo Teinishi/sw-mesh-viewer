@@ -10,14 +10,11 @@ import {
   type PropType,
 } from "vue";
 import { Viewer } from "../core";
-import type { ViewerMeshEntry } from "../core";
-import type { MeshData } from "../parser";
+import type { ViewerObjectState } from "../core";
 
 export interface MeshViewerProps {
-  meshData?: MeshData | null;
-  meshItems?: ViewerMeshEntry[];
+  objects?: ViewerObjectState[];
   backgroundColor?: number | null;
-  wireframe?: boolean;
   antialias?: boolean;
   alpha?: boolean;
 }
@@ -27,17 +24,13 @@ export { Viewer } from "../core";
 export const MeshViewer = defineComponent({
   name: "MeshViewer",
   props: {
-    meshItems: {
-      type: Array as PropType<ViewerMeshEntry[]>,
-      default: undefined,
+    objects: {
+      type: Array as PropType<ViewerObjectState[]>,
+      default: () => [],
     },
     backgroundColor: {
       type: [Number, null] as PropType<number | null>,
       default: null,
-    },
-    wireframe: {
-      type: Boolean,
-      default: false,
     },
     antialias: {
       type: Boolean,
@@ -48,7 +41,7 @@ export const MeshViewer = defineComponent({
       default: true,
     },
   },
-  setup(props) {
+  setup(props, { expose }) {
     const canvasRef = ref<HTMLCanvasElement | null>(null);
     const viewer = shallowRef<Viewer | null>(null);
     let resizeHandler: (() => void) | null = null;
@@ -68,11 +61,15 @@ export const MeshViewer = defineComponent({
       const width = canvas.clientWidth || 320;
       const height = canvas.clientHeight || 240;
       viewer.value.resize(width, height);
-      if (props.meshItems) viewer.value.loadMeshes(props.meshItems);
-      viewer.value.setWireframe(Boolean(props.wireframe));
+      viewer.value.applyObjectStates(props.objects);
       viewer.value.setBackgroundColor(props.backgroundColor ?? null);
       viewer.value.render();
     };
+
+    expose({
+      viewer,
+      getViewer: () => viewer.value,
+    });
 
     onMounted(() => {
       nextTick(() => {
@@ -102,23 +99,13 @@ export const MeshViewer = defineComponent({
     });
 
     watch(
-      () => props.meshItems,
-      () => {
-        if (viewer.value && props.meshItems) {
-          viewer.value.loadMeshes(props.meshItems);
-          viewer.value.render();
+      () => props.objects,
+      (objects) => {
+        if (viewer.value) {
+          viewer.value.applyObjectStates(objects);
         }
       },
       { deep: true },
-    );
-
-    watch(
-      () => props.wireframe,
-      (value) => {
-        if (viewer.value) {
-          viewer.value.setWireframe(Boolean(value));
-        }
-      },
     );
 
     watch(

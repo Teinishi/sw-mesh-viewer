@@ -1,5 +1,13 @@
 import * as THREE from "three";
 
+export type ViewerUniformValue =
+  | { type: "int"; value: number }
+  | { type: "vec3"; value: [number, number, number] | THREE.Vector3 | THREE.Color }
+  | { type: "vec4"; value: [number, number, number, number] | THREE.Vector4 };
+
+export type ViewerUniformPatch = Record<string, ViewerUniformValue>;
+export type ViewerUniformStore = Record<string, THREE.IUniform>;
+
 export const AMBIENT_COLOR_HIGH = new THREE.Color(118.0 / 255.0, 142.0 / 255.0, 190.0 / 255.0);
 export const AMBIENT_COLOR_LOW = new THREE.Color(11.0 / 255.0, 16.0 / 255.0, 44.0 / 255.0);
 const SKY_COLOR_UP = new THREE.Color(0.0, 61.0 / 255.0, 182.0 / 255.0);
@@ -40,7 +48,48 @@ void main() {
 }
 `;
 
-export function createOpaqueMaterial() {
+export function createUniformStore(defaults: ViewerUniformPatch = {}): ViewerUniformStore {
+  const store: ViewerUniformStore = {};
+
+  applyUniformPatch(store, defaults);
+
+  return store;
+}
+
+export function applyUniformPatch(store: ViewerUniformStore, patch: ViewerUniformPatch = {}): void {
+  Object.entries(patch).forEach(([name, uniform]) => {
+    const value = createUniformRuntimeValue(uniform);
+    if (store[name]) {
+      store[name].value = value;
+    } else {
+      store[name] = { value };
+    }
+  });
+}
+
+export function createDefaultOpaqueUniforms(): ViewerUniformPatch {
+  return {
+    overrideColor1: { type: "vec4", value: [1.0, 1.0, 1.0, 1.0] },
+    overrideColor2: { type: "vec4", value: [1.0, 1.0, 1.0, 1.0] },
+    overrideColor3: { type: "vec4", value: [1.0, 1.0, 1.0, 1.0] },
+    overrideColor: { type: "int", value: 1 },
+  };
+}
+
+export function createDefaultGlassUniforms(): ViewerUniformPatch {
+  return {
+    skyColorUp: {
+      type: "vec3",
+      value: SKY_COLOR_UP,
+    },
+    skyColorDown: {
+      type: "vec3",
+      value: SKY_COLOR_DOWN,
+    },
+  };
+}
+
+export function createOpaqueMaterial(uniforms = createUniformStore(createDefaultOpaqueUniforms())) {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
     color: 0xffffff,
@@ -49,11 +98,7 @@ export function createOpaqueMaterial() {
   });
 
   material.onBeforeCompile = (shader) => {
-    // 特定の頂点カラーを置き換える
-    shader.uniforms.overrideColor1 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
-    shader.uniforms.overrideColor2 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
-    shader.uniforms.overrideColor3 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
-    shader.uniforms.overrideColor = { value: 1 };
+    Object.assign(shader.uniforms, uniforms);
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -76,7 +121,6 @@ if (overrideColor == 1) {
 #endif`,
       );
 
-    // カメラ至近の補助ライト
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <aomap_fragment>",
       /* glsl */ `#include <aomap_fragment>
@@ -90,23 +134,13 @@ reflectedLight.directDiffuse += diffuseColor.rgb * incidence * distanceFactor * 
   return material;
 }
 
-export function createGlassMaterial() {
+export function createGlassMaterial(uniforms = createUniformStore(createDefaultGlassUniforms())) {
   return new THREE.ShaderMaterial({
     vertexShader: GLASS_VERTEX_SHADER,
     fragmentShader: GLASS_FRAGMENT_SHADER,
-
-    uniforms: {
-      skyColorUp: {
-        value: SKY_COLOR_UP,
-      },
-      skyColorDown: {
-        value: SKY_COLOR_DOWN,
-      },
-    },
-
+    uniforms: { ...uniforms },
     transparent: true,
     depthWrite: false,
-
     blending: THREE.CustomBlending,
     blendSrc: THREE.OneFactor,
     blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -114,11 +148,39 @@ export function createGlassMaterial() {
   });
 }
 
-export function createAdditiveMaterial() {
-  return new THREE.MeshBasicMaterial({
+export function createAdditiveMaterial(uniforms = createUniformStore()) {
+  const material = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
+
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+  };
+
+  return material;
+}
+
+function createUniformRuntimeValue(
+  uniform: ViewerUniformValue,
+): number | THREE.Vector3 | THREE.Vector4 | THREE.Color {
+  if (uniform.type === "int") {
+    return uniform.value;
+  }
+
+  if (uniform.type === "vec3") {
+    if (uniform.value instanceof THREE.Vector3 || uniform.value instanceof THREE.Color) {
+      return uniform.value.clone();
+    }
+
+    return new THREE.Vector3(...uniform.value);
+  }
+
+  if (uniform.value instanceof THREE.Vector4) {
+    return uniform.value.clone();
+  }
+
+  return new THREE.Vector4(...uniform.value);
 }

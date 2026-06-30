@@ -1,38 +1,47 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { MeshBinaryParser, MeshViewer, type MeshData, type ViewerMeshEntry } from "../../src";
+import {
+  MeshBinaryParser,
+  MeshViewer,
+  Viewer,
+  type MeshData,
+  type ViewerObjectState,
+} from "../../src";
+
+interface MeshViewerExpose {
+  getViewer: () => Viewer | null;
+}
 
 interface DemoObject {
   id: string;
   name: string;
   size: number;
+  kind: MeshData["kind"];
   visible: boolean;
-  data: MeshData;
 }
 
-const wireframe = ref(false);
 const backgroundColor = ref<number | null>(0x111827);
 const objects = ref<DemoObject[]>([]);
 const isDragging = ref(false);
 const errorMessage = ref("");
+const meshViewerRef = ref<MeshViewerExpose | null>(null);
 
-const viewerItems = computed<ViewerMeshEntry[]>(() =>
+const viewerObjects = computed<ViewerObjectState[]>(() =>
   objects.value.map((object) => ({
     id: object.id,
-    name: object.name,
-    data: object.data,
     visible: object.visible,
   })),
 );
 
 const visibleCount = computed(() => objects.value.filter((object) => object.visible).length);
 
+const getViewer = () => meshViewerRef.value?.getViewer() ?? null;
+
 const toggleBackground = () => {
   backgroundColor.value = backgroundColor.value === null ? 0x111827 : null;
 };
 
 const resetView = () => {
-  wireframe.value = false;
   backgroundColor.value = 0x111827;
   objects.value = objects.value.map((object) => ({ ...object, visible: true }));
   errorMessage.value = "";
@@ -45,16 +54,24 @@ const addFiles = async (fileList: FileList | File[]) => {
   const parser = new MeshBinaryParser();
   const loaded: DemoObject[] = [];
   const failed: string[] = [];
+  const viewer = getViewer();
 
   for (const file of files) {
     try {
       const data = parser.parse(await file.arrayBuffer());
+      const id = `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`;
+      viewer?.addObject({
+        id,
+        name: file.name,
+        data,
+        visible: true,
+      });
       loaded.push({
-        id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+        id,
         name: file.name,
         size: file.size,
+        kind: data.kind,
         visible: true,
-        data,
       });
     } catch (error) {
       failed.push(file.name);
@@ -79,10 +96,12 @@ const handleFileInput = async (event: Event) => {
 };
 
 const removeObject = (id: string) => {
+  getViewer()?.removeObject(id);
   objects.value = objects.value.filter((object) => object.id !== id);
 };
 
 const clearObjects = () => {
+  getViewer()?.clearObjects();
   objects.value = [];
   errorMessage.value = "";
 };
@@ -104,10 +123,6 @@ const formatBytes = (size: number) => {
         </div>
 
         <div class="demo-controls">
-          <label class="toggle">
-            <input v-model="wireframe" type="checkbox" />
-            <span>Wireframe</span>
-          </label>
           <button type="button" @click="toggleBackground">Toggle background</button>
           <button type="button" @click="resetView">Reset</button>
         </div>
@@ -147,7 +162,7 @@ const formatBytes = (size: number) => {
               </label>
               <div class="object-list__text">
                 <strong>{{ object.name }}</strong>
-                <span>{{ object.data.kind }} · {{ formatBytes(object.size) }}</span>
+                <span>{{ object.kind }} · {{ formatBytes(object.size) }}</span>
               </div>
               <button type="button" aria-label="Remove object" @click="removeObject(object.id)">
                 Remove
@@ -160,8 +175,8 @@ const formatBytes = (size: number) => {
 
         <div class="viewer-frame">
           <MeshViewer
-            :mesh-items="viewerItems"
-            :wireframe="wireframe"
+            ref="meshViewerRef"
+            :objects="viewerObjects"
             :background-color="backgroundColor"
           />
         </div>

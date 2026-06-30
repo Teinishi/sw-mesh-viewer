@@ -3,11 +3,24 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   AMBIENT_COLOR_HIGH,
   AMBIENT_COLOR_LOW,
+  applyUniformPatch,
   createAdditiveMaterial,
+  createDefaultGlassUniforms,
+  createDefaultOpaqueUniforms,
   createGlassMaterial,
   createOpaqueMaterial,
+  createUniformStore,
+  type ViewerUniformPatch,
+  type ViewerUniformStore,
 } from "./shaders";
 import type { MeshData, MeshFile, PhysFile } from "../parser";
+
+export type { ViewerUniformPatch, ViewerUniformValue } from "./shaders";
+
+export type ViewerObjectId = string;
+export type ViewerMaterialKind = "opaque" | "glass" | "additive";
+export type ViewerUniformOverrides = Partial<Record<ViewerMaterialKind, ViewerUniformPatch>>;
+export type ViewerObjectMatrix = THREE.Matrix4 | ArrayLike<number>;
 
 export interface ViewerOptions {
   antialias?: boolean;
@@ -18,15 +31,50 @@ export interface ViewerOptions {
   autoRotate?: boolean;
 }
 
-export interface ViewerMeshEntry {
-  id?: string;
+export interface AddViewerObjectOptions {
+  id: ViewerObjectId;
   name?: string;
   data: MeshData;
+  matrix?: ViewerObjectMatrix;
   visible?: boolean;
+  wireframe?: boolean;
+  uniforms?: ViewerUniformOverrides;
 }
 
-export interface LoadMeshesOptions {
-  resetCamera?: boolean;
+export interface ViewerObjectState {
+  id: ViewerObjectId;
+  matrix?: ViewerObjectMatrix;
+  visible?: boolean;
+  wireframe?: boolean;
+  uniforms?: ViewerUniformOverrides;
+}
+
+export interface ViewerObjectHandle {
+  id: ViewerObjectId;
+  name?: string;
+  root: THREE.Object3D;
+}
+
+interface ViewerUniformStores {
+  opaque: ViewerUniformStore;
+  glass: ViewerUniformStore;
+  additive: ViewerUniformStore;
+}
+
+interface ViewerObjectRecord {
+  id: ViewerObjectId;
+  name?: string;
+  root: THREE.Object3D;
+  meshes: THREE.Mesh[];
+  materials: THREE.Material[];
+  uniformStores: ViewerUniformStores;
+}
+
+interface CreatedObject {
+  root: THREE.Object3D;
+  meshes: THREE.Mesh[];
+  materials: THREE.Material[];
+  uniformStores: ViewerUniformStores;
 }
 
 export class Viewer {
@@ -36,8 +84,7 @@ export class Viewer {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
 
-  private meshObjects: THREE.Object3D[] = [];
-  private wireframe = false; // TODO: 消すか残すか検討
+  private readonly objects = new Map<ViewerObjectId, ViewerObjectRecord>();
   private backgroundColor: number | null;
   private controls?: OrbitControls;
   private renderLoopId?: number;
@@ -63,7 +110,6 @@ export class Viewer {
     this.camera.position.set(0, 1.5, 4);
     this.camera.lookAt(0, 0, 0);
 
-    // マウスコントロール
     if (options?.enableOrbitControls ?? true) {
       const controls = new OrbitControls(this.camera, this.renderer.domElement);
       controls.mouseButtons = {
@@ -88,7 +134,6 @@ export class Viewer {
       }
     }
 
-    // 環境光
     const hemi = new THREE.HemisphereLight(AMBIENT_COLOR_HIGH, AMBIENT_COLOR_LOW, 1.6);
     const sun = new THREE.DirectionalLight(new THREE.Color(0.95, 0.95, 1.0), 1.0);
     sun.position.set(0.0, 1.0, -0.5);
@@ -106,6 +151,204 @@ export class Viewer {
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
     this.render();
+  }
+
+  addObject(options: AddViewerObjectOptions): ViewerObjectId {
+    const id = options.id;
+    if (this.objects.has(id)) {
+      throw new Error(`Viewer object already exists: ${id}`);
+    }
+
+    const created = this.createObjectFromMeshData(options.data, options.uniforms);
+    created.root.name = options.name ?? id;
+    created.root.visible = options.visible ?? true;
+    created.root.matrixAutoUpdate = false;
+
+    const record: ViewerObjectRecord = {
+      id,
+      name: options.name,
+      root: created.root,
+      meshes: created.meshes,
+      materials: created.materials,
+      uniformStores: created.uniformStores,
+    };
+
+    this.objects.set(id, record);
+    this.scene.add(created.root);
+
+    if (options.matrix) {
+      this.setObjectMatrix(id, options.matrix, false);
+    } else {
+      created.root.updateMatrix();
+    }
+
+    if (options.wireframe !== undefined) {
+      this.setObjectWireframe(id, options.wireframe, false);
+    }
+
+    this.render();
+    return id;
+  }
+
+  removeObject(id: ViewerObjectId): void {
+    const record = this.objects.get(id);
+    if (!record) return;
+
+    this.scene.remove(record.root);
+    this.disposeObjectRecord(record);
+    this.objects.delete(id);
+    this.render();
+  }
+
+  clearObjects(): void {
+    this.objects.forEach((record) => {
+      this.scene.remove(record.root);
+      this.disposeObjectRecord(record);
+    });
+    this.objects.clear();
+    this.render();
+  }
+
+  getObject(id: ViewerObjectId): ViewerObjectHandle | undefined {
+    const record = this.objects.get(id);
+    if (!record) return undefined;
+
+    return {
+      id: record.id,
+      name: record.name,
+      root: record.root,
+    };
+  }
+
+  applyObjectStates(states: ViewerObjectState[]): void {
+    states.forEach((state) => {
+      this.applyObjectState(state, false);
+    });
+    this.render();
+  }
+
+  applyObjectState(state: ViewerObjectState, shouldRender = true): void {
+    if (state.matrix) {
+      this.setObjectMatrix(state.id, state.matrix, false);
+    }
+
+    if (state.visible !== undefined) {
+      this.setObjectVisible(state.id, state.visible, false);
+    }
+
+    if (state.wireframe !== undefined) {
+      this.setObjectWireframe(state.id, state.wireframe, false);
+    }
+
+    if (state.uniforms) {
+      this.setObjectUniforms(state.id, state.uniforms, false);
+    }
+
+    if (shouldRender) {
+      this.render();
+    }
+  }
+
+  setObjectMatrix(id: ViewerObjectId, matrix: ViewerObjectMatrix, shouldRender = true): void {
+    const record = this.objects.get(id);
+    if (!record) return;
+
+    record.root.matrix.copy(this.toMatrix4(matrix));
+    record.root.matrix.decompose(record.root.position, record.root.quaternion, record.root.scale);
+    record.root.updateMatrixWorld(true);
+
+    if (shouldRender) {
+      this.render();
+    }
+  }
+
+  setObjectVisible(id: ViewerObjectId, visible: boolean, shouldRender = true): void {
+    const record = this.objects.get(id);
+    if (!record) return;
+
+    record.root.visible = visible;
+
+    if (shouldRender) {
+      this.render();
+    }
+  }
+
+  setObjectWireframe(id: ViewerObjectId, enabled: boolean, shouldRender = true): void {
+    const record = this.objects.get(id);
+    if (!record) return;
+
+    record.materials.forEach((material) => {
+      if ("wireframe" in material) {
+        material.wireframe = enabled;
+      }
+    });
+
+    if (shouldRender) {
+      this.render();
+    }
+  }
+
+  setObjectUniforms(
+    id: ViewerObjectId,
+    uniforms: ViewerUniformOverrides,
+    shouldRender = true,
+  ): void {
+    const record = this.objects.get(id);
+    if (!record) return;
+
+    if (uniforms.opaque) {
+      applyUniformPatch(record.uniformStores.opaque, uniforms.opaque);
+    }
+
+    if (uniforms.glass) {
+      applyUniformPatch(record.uniformStores.glass, uniforms.glass);
+    }
+
+    if (uniforms.additive) {
+      applyUniformPatch(record.uniformStores.additive, uniforms.additive);
+    }
+
+    if (shouldRender) {
+      this.render();
+    }
+  }
+
+  resetCamera(): void {
+    this.camera.position.set(0, 1.5, 4);
+    this.camera.lookAt(0, 0, 0);
+    this.controls?.target.set(0, 0, 0);
+    this.updateControls();
+    this.render();
+  }
+
+  setBackgroundColor(color: number | null): void {
+    this.backgroundColor = color;
+
+    if (color === null) {
+      this.scene.background = null;
+    } else {
+      this.scene.background = new THREE.Color(color);
+    }
+
+    this.render();
+  }
+
+  setControlsEnabled(enabled: boolean): void {
+    if (this.controls) {
+      this.controls.enabled = enabled;
+    }
+  }
+
+  render(): void {
+    this.updateControls();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  dispose(): void {
+    this.stopRenderLoop();
+    this.clearObjects();
+    this.controls?.dispose();
+    this.renderer.dispose();
   }
 
   private updateControls(): void {
@@ -137,109 +380,29 @@ export class Viewer {
     this.renderLoopId = undefined;
   }
 
-  render(): void {
-    this.updateControls();
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  loadMesh(mesh: MeshData): void {
-    this.loadMeshes([{ data: mesh, visible: true }], { resetCamera: true });
-  }
-
-  loadMeshes(meshes: ViewerMeshEntry[], options?: LoadMeshesOptions): void {
-    this.clear();
-
-    const visibleMeshes = meshes.filter((mesh) => mesh.visible !== false);
-    visibleMeshes.forEach((mesh, index) => {
-      const object = this.createObjectFromMeshData(mesh.data);
-      object.name = mesh.name ?? mesh.id ?? `mesh-${index + 1}`;
-      object.position.x += (index - (visibleMeshes.length - 1) / 2) * 1.35;
-      this.applyWireframe(object, this.wireframe);
-      this.meshObjects.push(object);
-      this.scene.add(object);
-    });
-
-    if (options?.resetCamera ?? true) {
-      this.resetCamera();
-    }
-    this.render();
-  }
-
-  clear(): void {
-    if (this.meshObjects.length === 0) return;
-
-    this.meshObjects.forEach((object) => {
-      this.scene.remove(object);
-      object.traverse((entry) => {
-        if (!(entry instanceof THREE.Mesh)) return;
-
-        entry.geometry.dispose();
-        const material = entry.material;
-        if (Array.isArray(material)) {
-          material.forEach((item) => item.dispose());
-        } else {
-          material.dispose();
-        }
-      });
-    });
-    this.meshObjects = [];
-  }
-
-  resetCamera(): void {
-    this.camera.position.set(0, 1.5, 4);
-    this.camera.lookAt(0, 0, 0);
-    this.controls?.target.set(0, 0, 0);
-    this.updateControls();
-    this.render();
-  }
-
-  setWireframe(enabled: boolean): void {
-    this.wireframe = enabled;
-
-    this.meshObjects.forEach((object) => this.applyWireframe(object, enabled));
-
-    this.render();
-  }
-
-  setBackgroundColor(color: number | null): void {
-    this.backgroundColor = color;
-
-    if (color === null) {
-      this.scene.background = null;
-    } else {
-      this.scene.background = new THREE.Color(color);
-    }
-
-    this.render();
-  }
-
-  setControlsEnabled(enabled: boolean): void {
-    if (this.controls) {
-      this.controls.enabled = enabled;
-    }
-  }
-
-  dispose(): void {
-    this.stopRenderLoop();
-    this.clear();
-    this.controls?.dispose();
-    this.renderer.dispose();
-  }
-
-  private createObjectFromMeshData(mesh: MeshData): THREE.Object3D {
+  private createObjectFromMeshData(
+    mesh: MeshData,
+    uniforms: ViewerUniformOverrides = {},
+  ): CreatedObject {
     if (mesh.kind === "mesh") {
-      return this.createRenderMesh(mesh);
+      return this.createRenderMesh(mesh, uniforms);
     }
 
-    return this.createPhysMeshGroup(mesh);
+    return this.createPhysMeshGroup(mesh, uniforms);
   }
 
-  private createRenderMesh(mesh: MeshFile): THREE.Mesh {
+  private createRenderMesh(mesh: MeshFile, uniforms: ViewerUniformOverrides): CreatedObject {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(mesh.vertices.length * 3);
     const normals = new Float32Array(mesh.vertices.length * 3);
     const colors = new Float32Array(mesh.vertices.length * 3);
     const indices = this.createReversedTriangleIndices(mesh.indices);
+    const uniformStores = this.createUniformStores(uniforms);
+    const materials = [
+      createOpaqueMaterial(uniformStores.opaque),
+      createGlassMaterial(uniformStores.glass),
+      createAdditiveMaterial(uniformStores.additive),
+    ];
 
     mesh.vertices.forEach((vertex, index) => {
       const offset = index * 3;
@@ -261,15 +424,21 @@ export class Viewer {
     this.addSubmeshGroups(geometry, mesh);
     geometry.computeBoundingSphere();
 
-    return new THREE.Mesh(geometry, [
-      createOpaqueMaterial(),
-      createGlassMaterial(),
-      createAdditiveMaterial(),
-    ]);
+    const root = new THREE.Mesh(geometry, materials);
+
+    return {
+      root,
+      meshes: [root],
+      materials,
+      uniformStores,
+    };
   }
 
-  private createPhysMeshGroup(mesh: PhysFile): THREE.Group {
+  private createPhysMeshGroup(mesh: PhysFile, uniforms: ViewerUniformOverrides): CreatedObject {
     const group = new THREE.Group();
+    const uniformStores = this.createUniformStores(uniforms);
+    const material = createOpaqueMaterial(uniformStores.opaque);
+    const meshes: THREE.Mesh[] = [];
 
     mesh.subPhysMeshes.forEach((submesh) => {
       const geometry = new THREE.BufferGeometry();
@@ -287,10 +456,47 @@ export class Viewer {
       geometry.computeVertexNormals();
       geometry.computeBoundingSphere();
 
-      group.add(new THREE.Mesh(geometry, createOpaqueMaterial()));
+      const child = new THREE.Mesh(geometry, material);
+      meshes.push(child);
+      group.add(child);
     });
 
-    return group;
+    return {
+      root: group,
+      meshes,
+      materials: [material],
+      uniformStores,
+    };
+  }
+
+  private createUniformStores(uniforms: ViewerUniformOverrides): ViewerUniformStores {
+    const opaque = createUniformStore(createDefaultOpaqueUniforms());
+    const glass = createUniformStore(createDefaultGlassUniforms());
+    const additive = createUniformStore();
+
+    applyUniformPatch(opaque, uniforms.opaque);
+    applyUniformPatch(glass, uniforms.glass);
+    applyUniformPatch(additive, uniforms.additive);
+
+    return { opaque, glass, additive };
+  }
+
+  private disposeObjectRecord(record: ViewerObjectRecord): void {
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+
+    record.meshes.forEach((mesh) => {
+      geometries.add(mesh.geometry);
+      const material = mesh.material;
+      if (Array.isArray(material)) {
+        material.forEach((item) => materials.add(item));
+      } else {
+        materials.add(material);
+      }
+    });
+
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
   }
 
   private createReversedTriangleIndices(indices: number[]): number[] {
@@ -328,20 +534,15 @@ export class Viewer {
     return 0;
   }
 
-  private applyWireframe(object: THREE.Object3D, enabled: boolean): void {
-    object.traverse((entry) => {
-      if (!(entry instanceof THREE.Mesh)) return;
+  private toMatrix4(matrix: ViewerObjectMatrix): THREE.Matrix4 {
+    if (matrix instanceof THREE.Matrix4) {
+      return matrix;
+    }
 
-      const material = entry.material;
-      if (Array.isArray(material)) {
-        material.forEach((item) => {
-          if ("wireframe" in item) {
-            item.wireframe = enabled;
-          }
-        });
-      } else if ("wireframe" in material) {
-        material.wireframe = enabled;
-      }
-    });
+    if (matrix.length !== 16) {
+      throw new Error("Viewer object matrix must have 16 elements");
+    }
+
+    return new THREE.Matrix4().fromArray(Array.from(matrix));
   }
 }
