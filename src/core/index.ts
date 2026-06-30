@@ -2,6 +2,11 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { MeshData } from "../parser";
 
+const AMBIENT_COLOR_HIGH = new THREE.Color(118.0 / 255.0, 142.0 / 255.0, 190.0 / 255.0);
+const AMBIENT_COLOR_LOW = new THREE.Color(11.0 / 255.0, 16.0 / 255.0, 44.0 / 255.0);
+const SKY_COLOR_UP = new THREE.Color(0.0, 61.0 / 255.0, 182.0 / 255.0);
+const SKY_COLOR_DOWN = new THREE.Color(139.0 / 255.0, 210.0 / 255.0, 207.0 / 255.0);
+
 export interface ViewerOptions {
   antialias?: boolean;
   alpha?: boolean;
@@ -35,7 +40,7 @@ export class Viewer {
     });
 
     this.scene = new THREE.Scene();
-    this.backgroundColor = options?.backgroundColor ?? 0x202020;
+    this.backgroundColor = options?.backgroundColor ?? 0x000000;
 
     if (this.backgroundColor !== null) {
       this.scene.background = new THREE.Color(this.backgroundColor);
@@ -45,6 +50,7 @@ export class Viewer {
     this.camera.position.set(0, 1.5, 4);
     this.camera.lookAt(0, 0, 0);
 
+    // マウスコントロール
     if (options?.enableOrbitControls ?? true) {
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = options?.enableDamping ?? true;
@@ -64,19 +70,21 @@ export class Viewer {
       }
     }
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    directionalLight.position.set(3, 4, 5);
+    // 環境光
+    const hemi = new THREE.HemisphereLight(AMBIENT_COLOR_HIGH, AMBIENT_COLOR_LOW, 1.6);
+    const sun = new THREE.DirectionalLight(new THREE.Color(0.95, 0.95, 1.0), 2.2);
+    sun.position.set(0.0, 1.0, -0.5);
 
-    this.scene.add(ambientLight);
-    this.scene.add(directionalLight);
+    this.scene.add(hemi);
+    this.scene.add(sun);
   }
 
   resize(width: number, height: number): void {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
 
-    const pixelRatio = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+    const pixelRatio =
+      typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
     this.render();
@@ -120,13 +128,63 @@ export class Viewer {
     void mesh;
     this.clear();
 
+    // 仮で立方体
     const geometry = new THREE.BoxGeometry(1, 1, 1);
+
+    geometry.setAttribute(
+      "color",
+      new THREE.BufferAttribute(
+        new Float32Array([].concat(...Array(24).fill([1.0, 0.494, 0.0]))),
+        3,
+      ),
+    );
+
     const material = new THREE.MeshStandardMaterial({
-      color: 0x66ccff,
-      roughness: 0.35,
-      metalness: 0.15,
+      vertexColors: true,
+      color: 0xffffff,
+      roughness: 1.0,
+      metalness: 0.0,
       wireframe: this.wireframe,
     });
+
+    material.onBeforeCompile = (shader) => {
+      // 特定の頂点カラーを置き換える
+      shader.uniforms.overrideColor1 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
+      shader.uniforms.overrideColor2 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
+      shader.uniforms.overrideColor3 = { value: new THREE.Vector4(1.0, 1.0, 1.0, 1.0) };
+      shader.uniforms.overrideColor = { value: 1 };
+
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+uniform vec4 overrideColor1;
+uniform vec4 overrideColor2;
+uniform vec4 overrideColor3;
+uniform int overrideColor;`,
+        )
+        .replace(
+          "#include <color_vertex>",
+          `#ifdef USE_COLOR
+vColor.xyz = color.xyz;
+if (overrideColor == 1) {
+  if (distance(color.rgb, vec3(1.0, 0.494, 0.0)) < 0.01) vColor = overrideColor1;
+  else if (distance(color.rgb, vec3(0.608, 0.494, 0.0)) < 0.01) vColor = overrideColor2;
+  else if (distance(color.rgb, vec3(0.216, 0.494, 0.0)) < 0.01) vColor = overrideColor3;
+}
+#endif`,
+        );
+
+      // カメラ至近の補助ライト
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <aomap_fragment>",
+        `#include <aomap_fragment>
+float dist = length(vViewPosition);
+float incidence = max(dot(geometryNormal, geometryViewDir), 0.0);
+float distanceFactor = 0.05 * (1.0 / max(0.01, dist) - 1.0 / 100.0);
+reflectedLight.directDiffuse += diffuseColor.rgb * incidence * distanceFactor * 16.0;`,
+      );
+    };
 
     this.meshObject = new THREE.Mesh(geometry, material);
     this.meshObject.position.set(0, 0, 0);

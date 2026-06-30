@@ -1,4 +1,14 @@
-import { defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type PropType } from "vue";
+import {
+  defineComponent,
+  h,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  watch,
+  type PropType,
+} from "vue";
 import { Viewer } from "../core";
 import type { MeshData } from "../parser";
 
