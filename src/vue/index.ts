@@ -10,10 +10,12 @@ import {
   type PropType,
 } from "vue";
 import { Viewer } from "../core";
+import type { ViewerMeshEntry } from "../core";
 import type { MeshData } from "../parser";
 
 export interface MeshViewerProps {
   meshData?: MeshData | null;
+  meshItems?: ViewerMeshEntry[];
   backgroundColor?: number | null;
   wireframe?: boolean;
   antialias?: boolean;
@@ -25,9 +27,9 @@ export { Viewer } from "../core";
 export const MeshViewer = defineComponent({
   name: "MeshViewer",
   props: {
-    meshData: {
-      type: Object as PropType<MeshData | null>,
-      default: null,
+    meshItems: {
+      type: Array as PropType<ViewerMeshEntry[]>,
+      default: undefined,
     },
     backgroundColor: {
       type: [Number, null] as PropType<number | null>,
@@ -66,7 +68,7 @@ export const MeshViewer = defineComponent({
       const width = canvas.clientWidth || 320;
       const height = canvas.clientHeight || 240;
       viewer.value.resize(width, height);
-      viewer.value.loadMesh(props.meshData ?? null);
+      if (props.meshItems) viewer.value.loadMeshes(props.meshItems);
       viewer.value.setWireframe(Boolean(props.wireframe));
       viewer.value.setBackgroundColor(props.backgroundColor ?? null);
       viewer.value.render();
@@ -100,13 +102,14 @@ export const MeshViewer = defineComponent({
     });
 
     watch(
-      () => props.meshData,
+      () => props.meshItems,
       () => {
-        if (viewer.value) {
-          viewer.value.loadMesh(props.meshData ?? null);
+        if (viewer.value && props.meshItems) {
+          viewer.value.loadMeshes(props.meshItems);
           viewer.value.render();
         }
       },
+      { deep: true },
     );
 
     watch(

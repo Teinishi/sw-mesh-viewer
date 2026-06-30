@@ -3,10 +3,11 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   AMBIENT_COLOR_HIGH,
   AMBIENT_COLOR_LOW,
-  //createAdditiveMaterial,
-  //createGlassMaterial,
+  createAdditiveMaterial,
+  createGlassMaterial,
   createOpaqueMaterial,
 } from "./shaders";
+import type { MeshData, MeshFile, PhysFile } from "../parser";
 
 export interface ViewerOptions {
   antialias?: boolean;
@@ -17,6 +18,17 @@ export interface ViewerOptions {
   autoRotate?: boolean;
 }
 
+export interface ViewerMeshEntry {
+  id?: string;
+  name?: string;
+  data: MeshData;
+  visible?: boolean;
+}
+
+export interface LoadMeshesOptions {
+  resetCamera?: boolean;
+}
+
 export class Viewer {
   readonly canvas: HTMLCanvasElement;
 
@@ -24,7 +36,7 @@ export class Viewer {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
 
-  private meshObject?: THREE.Object3D;
+  private meshObjects: THREE.Object3D[] = [];
   private wireframe = false; // TODO: 消すか残すか検討
   private backgroundColor: number | null;
   private controls?: OrbitControls;
@@ -130,37 +142,47 @@ export class Viewer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  loadMesh(mesh: null | undefined): void {
-    void mesh;
+  loadMesh(mesh: MeshData): void {
+    this.loadMeshes([{ data: mesh, visible: true }], { resetCamera: true });
+  }
+
+  loadMeshes(meshes: ViewerMeshEntry[], options?: LoadMeshesOptions): void {
     this.clear();
 
-    // TODO: 仮で立方体を表示しているが、mesh を読み込むようにする
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const visibleMeshes = meshes.filter((mesh) => mesh.visible !== false);
+    visibleMeshes.forEach((mesh, index) => {
+      const object = this.createObjectFromMeshData(mesh.data);
+      object.name = mesh.name ?? mesh.id ?? `mesh-${index + 1}`;
+      object.position.x += (index - (visibleMeshes.length - 1) / 2) * 1.35;
+      this.applyWireframe(object, this.wireframe);
+      this.meshObjects.push(object);
+      this.scene.add(object);
+    });
 
-    // 立方体の全頂点に仮の色を割り当て
-    geometry.setAttribute(
-      "color",
-      new THREE.BufferAttribute(
-        new Float32Array([].concat(...Array(24).fill([1.0, 0.494, 0.0]))),
-        3,
-      ),
-    );
-
-    const material = createOpaqueMaterial();
-
-    this.meshObject = new THREE.Mesh(geometry, material);
-    this.meshObject.position.set(0, 0, 0);
-    this.scene.add(this.meshObject);
-
-    this.resetCamera();
+    if (options?.resetCamera ?? true) {
+      this.resetCamera();
+    }
     this.render();
   }
 
   clear(): void {
-    if (!this.meshObject) return;
+    if (this.meshObjects.length === 0) return;
 
-    this.scene.remove(this.meshObject);
-    this.meshObject = undefined;
+    this.meshObjects.forEach((object) => {
+      this.scene.remove(object);
+      object.traverse((entry) => {
+        if (!(entry instanceof THREE.Mesh)) return;
+
+        entry.geometry.dispose();
+        const material = entry.material;
+        if (Array.isArray(material)) {
+          material.forEach((item) => item.dispose());
+        } else {
+          material.dispose();
+        }
+      });
+    });
+    this.meshObjects = [];
   }
 
   resetCamera(): void {
@@ -174,19 +196,7 @@ export class Viewer {
   setWireframe(enabled: boolean): void {
     this.wireframe = enabled;
 
-    if (this.meshObject instanceof THREE.Mesh) {
-      const material = this.meshObject.material;
-
-      if (Array.isArray(material)) {
-        material.forEach((entry) => {
-          if (entry instanceof THREE.MeshStandardMaterial) {
-            entry.wireframe = enabled;
-          }
-        });
-      } else if (material instanceof THREE.MeshStandardMaterial) {
-        material.wireframe = enabled;
-      }
-    }
+    this.meshObjects.forEach((object) => this.applyWireframe(object, enabled));
 
     this.render();
   }
@@ -214,5 +224,124 @@ export class Viewer {
     this.clear();
     this.controls?.dispose();
     this.renderer.dispose();
+  }
+
+  private createObjectFromMeshData(mesh: MeshData): THREE.Object3D {
+    if (mesh.kind === "mesh") {
+      return this.createRenderMesh(mesh);
+    }
+
+    return this.createPhysMeshGroup(mesh);
+  }
+
+  private createRenderMesh(mesh: MeshFile): THREE.Mesh {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(mesh.vertices.length * 3);
+    const normals = new Float32Array(mesh.vertices.length * 3);
+    const colors = new Float32Array(mesh.vertices.length * 3);
+    const indices = this.createReversedTriangleIndices(mesh.indices);
+
+    mesh.vertices.forEach((vertex, index) => {
+      const offset = index * 3;
+      positions[offset] = vertex.position.x;
+      positions[offset + 1] = vertex.position.y;
+      positions[offset + 2] = vertex.position.z;
+      normals[offset] = vertex.normal.x;
+      normals[offset + 1] = vertex.normal.y;
+      normals[offset + 2] = vertex.normal.z;
+      colors[offset] = vertex.color.r / 255;
+      colors[offset + 1] = vertex.color.g / 255;
+      colors[offset + 2] = vertex.color.b / 255;
+    });
+
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(indices);
+    this.addSubmeshGroups(geometry, mesh);
+    geometry.computeBoundingSphere();
+
+    return new THREE.Mesh(geometry, [
+      createOpaqueMaterial(),
+      createGlassMaterial(),
+      createAdditiveMaterial(),
+    ]);
+  }
+
+  private createPhysMeshGroup(mesh: PhysFile): THREE.Group {
+    const group = new THREE.Group();
+
+    mesh.subPhysMeshes.forEach((submesh) => {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(submesh.vertices.length * 3);
+
+      submesh.vertices.forEach((vertex, index) => {
+        const offset = index * 3;
+        positions[offset] = vertex.x;
+        positions[offset + 1] = vertex.y;
+        positions[offset + 2] = vertex.z;
+      });
+
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setIndex(this.createReversedTriangleIndices(submesh.indices));
+      geometry.computeVertexNormals();
+      geometry.computeBoundingSphere();
+
+      group.add(new THREE.Mesh(geometry, createOpaqueMaterial()));
+    });
+
+    return group;
+  }
+
+  private createReversedTriangleIndices(indices: number[]): number[] {
+    const reversed = indices.slice();
+
+    for (let i = 0; i + 2 < reversed.length; i += 3) {
+      const next = reversed[i + 1];
+      reversed[i + 1] = reversed[i + 2] ?? next;
+      reversed[i + 2] = next;
+    }
+
+    return reversed;
+  }
+
+  private addSubmeshGroups(geometry: THREE.BufferGeometry, mesh: MeshFile): void {
+    geometry.clearGroups();
+
+    if (mesh.submeshes.length === 0) {
+      geometry.addGroup(0, mesh.indices.length, 0);
+      return;
+    }
+
+    mesh.submeshes.forEach((submesh) => {
+      geometry.addGroup(
+        submesh.indexBufferStart,
+        submesh.indexBufferLength,
+        this.getMaterialIndexForShaderId(submesh.shaderId),
+      );
+    });
+  }
+
+  private getMaterialIndexForShaderId(shaderId: number): number {
+    if (shaderId === 1) return 1;
+    if (shaderId === 2) return 2;
+    return 0;
+  }
+
+  private applyWireframe(object: THREE.Object3D, enabled: boolean): void {
+    object.traverse((entry) => {
+      if (!(entry instanceof THREE.Mesh)) return;
+
+      const material = entry.material;
+      if (Array.isArray(material)) {
+        material.forEach((item) => {
+          if ("wireframe" in item) {
+            item.wireframe = enabled;
+          }
+        });
+      } else if ("wireframe" in material) {
+        material.wireframe = enabled;
+      }
+    });
   }
 }

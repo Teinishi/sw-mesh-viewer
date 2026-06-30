@@ -43,7 +43,7 @@ export interface PhysFile {
   subPhysMeshes: PhysMesh[];
 }
 
-export type ParsedMeshFile = MeshFile | PhysFile;
+export type MeshData = MeshFile | PhysFile;
 
 function toUint8Array(input: ArrayBuffer | ArrayBufferView | Uint8Array): Uint8Array {
   if (input instanceof Uint8Array) {
@@ -65,7 +65,7 @@ export class MeshBinaryParser {
   private view!: DataView;
   private offset = 0;
 
-  parse(input: ArrayBuffer | ArrayBufferView | Uint8Array): ParsedMeshFile {
+  parse(input: ArrayBuffer | ArrayBufferView | Uint8Array): MeshData {
     const bytes = toUint8Array(input);
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.offset = 0;
