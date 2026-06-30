@@ -21,7 +21,7 @@ const resetView = () => {
       <div class="demo-header">
         <div>
           <h1>SW Mesh Viewer</h1>
-          <p>Drag to orbit, scroll to zoom, and right-drag to pan.</p>
+          <p>Right-drag to orbit, scroll to zoom, and middle-drag to pan.</p>
         </div>
 
         <div class="demo-controls">

@@ -52,19 +52,24 @@ export class Viewer {
 
     // マウスコントロール
     if (options?.enableOrbitControls ?? true) {
-      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-      this.controls.enableDamping = options?.enableDamping ?? true;
-      this.controls.dampingFactor = 0.08;
-      this.controls.enablePan = true;
-      this.controls.enableZoom = true;
-      this.controls.enableRotate = true;
-      this.controls.target.set(0, 0, 0);
-      this.controls.autoRotate = options?.autoRotate ?? false;
-      this.controls.addEventListener("change", () => {
+      const controls = new OrbitControls(this.camera, this.renderer.domElement);
+      controls.mouseButtons = {
+        LEFT: null,
+        MIDDLE: THREE.MOUSE.PAN,
+        RIGHT: THREE.MOUSE.ROTATE,
+      };
+      controls.enableDamping = options?.enableDamping ?? false;
+      controls.dampingFactor = 0.08;
+      controls.enablePan = true;
+      controls.enableZoom = true;
+      controls.enableRotate = true;
+      controls.target.set(0, 0, 0);
+      controls.autoRotate = options?.autoRotate ?? false;
+      controls.addEventListener("change", () => {
         this.render();
       });
+      this.controls = controls;
       this.updateControls();
-
       if (this.controls.enableDamping || this.controls.autoRotate) {
         this.startRenderLoop();
       }
