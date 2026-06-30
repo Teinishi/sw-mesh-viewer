@@ -6,15 +6,15 @@ const SKY_COLOR_UP = new THREE.Color(0.0, 61.0 / 255.0, 182.0 / 255.0);
 const SKY_COLOR_DOWN = new THREE.Color(139.0 / 255.0, 210.0 / 255.0, 207.0 / 255.0);
 
 const GLASS_VERTEX_SHADER = /* glsl */ `
-varying vec3 vWorldPosition;
-varying vec3 vWorldNormal;
+out vec3 vWorldPosition;
+out vec3 vWorldNormal;
 
 void main() {
-    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-    vWorldPosition = worldPosition.xyz;
-    vWorldNormal = normalize(normalMatrix * normal);
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldPosition = worldPosition.xyz;
+  vWorldNormal = normalize(mat3(modelMatrix) * normal);
 
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
@@ -22,33 +22,21 @@ const GLASS_FRAGMENT_SHADER = /* glsl */ `
 uniform vec3 skyColorUp;
 uniform vec3 skyColorDown;
 
-varying vec3 vWorldPosition;
-varying vec3 vWorldNormal;
+in vec3 vWorldPosition;
+in vec3 vWorldNormal;
 
 void main() {
-    // Fragment -> Camera
-    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+  vec3 cameraToFragment = normalize(vWorldPosition - cameraPosition);
+  vec3 reflectedDir = reflect(cameraToFragment, normalize(vWorldNormal));
 
-    // Camera -> Fragment (元シェーダーと同じ向き)
-    vec3 cameraToFragment = -viewDir;
+  float reflectionFactor = max(0.0, -dot(vWorldNormal, cameraToFragment));
+  reflectionFactor = pow(1.0 - reflectionFactor, 5.0);
+  reflectionFactor = clamp(reflectionFactor, 0.0, 1.0);
 
-    vec3 reflectedDir = reflect(cameraToFragment, normalize(vWorldNormal));
+  float angleFactor = reflectedDir.y * 0.5 + 0.5;
+  vec3 skyColor = mix(skyColorDown, skyColorUp, angleFactor);
 
-    float reflectionFactor = max(0.0, dot(vWorldNormal, viewDir));
-    reflectionFactor = pow(1.0 - reflectionFactor, 5.0);
-
-    float angleFactor = reflectedDir.y * 0.5 + 0.5;
-
-    vec3 skyColor = mix(
-        skyColorDown,
-        skyColorUp,
-        angleFactor
-    );
-
-    gl_FragColor = vec4(
-        skyColor * reflectionFactor * 0.823,
-        0.0
-    );
+  gl_FragColor = vec4(skyColor * reflectionFactor * 0.823, 0.0);
 }
 `;
 

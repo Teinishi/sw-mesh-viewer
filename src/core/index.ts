@@ -90,7 +90,7 @@ export class Viewer {
 
     // 環境光
     const hemi = new THREE.HemisphereLight(AMBIENT_COLOR_HIGH, AMBIENT_COLOR_LOW, 1.6);
-    const sun = new THREE.DirectionalLight(new THREE.Color(0.95, 0.95, 1.0), 2.2);
+    const sun = new THREE.DirectionalLight(new THREE.Color(0.95, 0.95, 1.0), 1.0);
     sun.position.set(0.0, 1.0, -0.5);
 
     this.scene.add(hemi);
