@@ -1,9 +1,11 @@
+/** A three-dimensional vector stored in a parsed mesh file. */
 export interface MeshVec3 {
   x: number;
   y: number;
   z: number;
 }
 
+/** A per-vertex RGBA color stored as 8-bit channel values. */
 export interface MeshColor4 {
   r: number;
   g: number;
@@ -11,21 +13,27 @@ export interface MeshColor4 {
   a: number;
 }
 
+/** A render mesh vertex with position, color, and normal data. */
 export interface MeshVertex {
   position: MeshVec3;
   color: MeshColor4;
   normal: MeshVec3;
 }
 
+/** A material range inside a mesh index buffer. */
 export interface SubMesh {
+  /** Start offset in the parent MeshFile.indices array. */
   indexBufferStart: number;
+  /** Number of indices used by this submesh. */
   indexBufferLength: number;
+  /** Material selector: 0 = opaque, 1 = glass, 2 = additive. */
   shaderId: number;
   boundsMin: MeshVec3;
   boundsMax: MeshVec3;
   name: string;
 }
 
+/** Parsed render mesh data. */
 export interface MeshFile {
   kind: "mesh";
   vertices: MeshVertex[];
@@ -33,16 +41,19 @@ export interface MeshFile {
   submeshes: SubMesh[];
 }
 
+/** A collision/physics mesh section. */
 export interface PhysMesh {
   vertices: MeshVec3[];
   indices: number[];
 }
 
+/** Parsed physics mesh data. */
 export interface PhysFile {
   kind: "phys";
   subPhysMeshes: PhysMesh[];
 }
 
+/** Any parsed Stormworks mesh-related file supported by this package. */
 export type MeshData = MeshFile | PhysFile;
 
 function toUint8Array(input: ArrayBuffer | ArrayBufferView | Uint8Array): Uint8Array {
@@ -61,10 +72,12 @@ function toUint8Array(input: ArrayBuffer | ArrayBufferView | Uint8Array): Uint8A
   throw new TypeError("Unsupported input type for mesh parser");
 }
 
+/** Binary parser for Stormworks mesh and physics mesh files. */
 export class MeshBinaryParser {
   private view!: DataView;
   private offset = 0;
 
+  /** Parse a mesh or phys binary payload into structured mesh data. */
   parse(input: ArrayBuffer | ArrayBufferView | Uint8Array): MeshData {
     const bytes = toUint8Array(input);
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);

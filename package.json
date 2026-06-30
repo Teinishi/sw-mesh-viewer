@@ -1,7 +1,7 @@
 {
   "name": "sw-mesh-viewer",
   "version": "0.1.0",
-  "description": "Stormworks mesh parser and viewer.",
+  "description": "Stormworks mesh parser and Three.js viewer utilities.",
   "homepage": "https://github.com/Teinishi/sw-mesh-viewer#readme",
   "license": "MIT",
   "author": "Teinishi",

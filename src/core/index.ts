@@ -17,41 +17,71 @@ import type { MeshData, MeshFile, PhysFile } from "../parser";
 
 export type { ViewerUniformPatch, ViewerUniformValue } from "./shaders";
 
+/** Stable application-owned identifier for an object managed by a Viewer. */
 export type ViewerObjectId = string;
+
+/** Material families that can receive per-object uniform overrides. */
 export type ViewerMaterialKind = "opaque" | "glass" | "additive";
+
+/** Per-material uniform overrides for a viewer object. */
 export type ViewerUniformOverrides = Partial<Record<ViewerMaterialKind, ViewerUniformPatch>>;
+
+/** Matrix used to transform a viewer object. Arrays must contain 16 column-major elements. */
 export type ViewerObjectMatrix = THREE.Matrix4 | ArrayLike<number>;
 
+/** Options used when creating a Viewer instance. */
 export interface ViewerOptions {
+  /** Enable WebGL antialiasing. Defaults to true. */
   antialias?: boolean;
+  /** Enable renderer alpha. Defaults to true. */
   alpha?: boolean;
+  /** Scene background color, or null for a transparent background. */
   backgroundColor?: number | null;
+  /** Enable built-in orbit controls. Defaults to true. */
   enableOrbitControls?: boolean;
+  /** Enable damping on the built-in orbit controls. */
   enableDamping?: boolean;
+  /** Enable auto-rotation on the built-in orbit controls. */
   autoRotate?: boolean;
 }
 
+/** Options for adding a parsed mesh object to a Viewer. */
 export interface AddViewerObjectOptions {
+  /** Unique object id supplied by the application. */
   id: ViewerObjectId;
+  /** Optional display/debug name assigned to the root Three.js object. */
   name?: string;
+  /** Parsed mesh or physics mesh data to render. */
   data: MeshData;
+  /** Initial transform matrix. */
   matrix?: ViewerObjectMatrix;
+  /** Initial visibility. Defaults to true. */
   visible?: boolean;
+  /** Initial wireframe state for materials that support it. */
   wireframe?: boolean;
+  /** Initial per-material uniform overrides. */
   uniforms?: ViewerUniformOverrides;
 }
 
+/** Declarative state patch for an object that already exists in a Viewer. */
 export interface ViewerObjectState {
+  /** Id of the object to update. Missing ids are ignored. */
   id: ViewerObjectId;
+  /** Transform matrix to apply to the object. */
   matrix?: ViewerObjectMatrix;
+  /** Visibility to apply to the object root. */
   visible?: boolean;
+  /** Wireframe state for materials that support it. */
   wireframe?: boolean;
+  /** Per-material uniform overrides to apply. */
   uniforms?: ViewerUniformOverrides;
 }
 
+/** Read-only handle for a Viewer object. */
 export interface ViewerObjectHandle {
   id: ViewerObjectId;
   name?: string;
+  /** Root Three.js object added to the viewer scene. */
   root: THREE.Object3D;
 }
 
@@ -77,11 +107,16 @@ interface CreatedObject {
   uniformStores: ViewerUniformStores;
 }
 
+/** Three.js based renderer for parsed Stormworks mesh data. */
 export class Viewer {
+  /** Canvas owned by the caller and used by the WebGL renderer. */
   readonly canvas: HTMLCanvasElement;
 
+  /** Underlying Three.js renderer. */
   readonly renderer: THREE.WebGLRenderer;
+  /** Scene containing lights and viewer objects. */
   readonly scene: THREE.Scene;
+  /** Perspective camera used to render the scene. */
   readonly camera: THREE.PerspectiveCamera;
 
   private readonly objects = new Map<ViewerObjectId, ViewerObjectRecord>();
@@ -90,6 +125,7 @@ export class Viewer {
   private renderLoopId?: number;
   private isUpdatingControls = false;
 
+  /** Create a viewer bound to an existing canvas element. */
   constructor(canvas: HTMLCanvasElement, options?: ViewerOptions) {
     this.canvas = canvas;
 
@@ -142,6 +178,7 @@ export class Viewer {
     this.scene.add(sun);
   }
 
+  /** Resize the renderer and update the camera aspect ratio. */
   resize(width: number, height: number): void {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
@@ -153,6 +190,7 @@ export class Viewer {
     this.render();
   }
 
+  /** Add parsed mesh data as a new object and return its id. */
   addObject(options: AddViewerObjectOptions): ViewerObjectId {
     const id = options.id;
     if (this.objects.has(id)) {
@@ -190,6 +228,7 @@ export class Viewer {
     return id;
   }
 
+  /** Remove one object from the viewer and dispose its owned GPU resources. */
   removeObject(id: ViewerObjectId): void {
     const record = this.objects.get(id);
     if (!record) return;
@@ -200,6 +239,7 @@ export class Viewer {
     this.render();
   }
 
+  /** Remove all objects from the viewer and dispose their owned GPU resources. */
   clearObjects(): void {
     this.objects.forEach((record) => {
       this.scene.remove(record.root);
@@ -209,6 +249,7 @@ export class Viewer {
     this.render();
   }
 
+  /** Get a handle for an object currently managed by the viewer. */
   getObject(id: ViewerObjectId): ViewerObjectHandle | undefined {
     const record = this.objects.get(id);
     if (!record) return undefined;
@@ -220,6 +261,7 @@ export class Viewer {
     };
   }
 
+  /** Apply multiple object state patches and render once. */
   applyObjectStates(states: ViewerObjectState[]): void {
     states.forEach((state) => {
       this.applyObjectState(state, false);
@@ -227,6 +269,7 @@ export class Viewer {
     this.render();
   }
 
+  /** Apply a single object state patch. */
   applyObjectState(state: ViewerObjectState, shouldRender = true): void {
     if (state.matrix) {
       this.setObjectMatrix(state.id, state.matrix, false);
@@ -249,6 +292,7 @@ export class Viewer {
     }
   }
 
+  /** Set the transform matrix for one object. */
   setObjectMatrix(id: ViewerObjectId, matrix: ViewerObjectMatrix, shouldRender = true): void {
     const record = this.objects.get(id);
     if (!record) return;
@@ -262,6 +306,7 @@ export class Viewer {
     }
   }
 
+  /** Set visibility for one object. */
   setObjectVisible(id: ViewerObjectId, visible: boolean, shouldRender = true): void {
     const record = this.objects.get(id);
     if (!record) return;
@@ -273,6 +318,7 @@ export class Viewer {
     }
   }
 
+  /** Set wireframe rendering for one object where supported by its materials. */
   setObjectWireframe(id: ViewerObjectId, enabled: boolean, shouldRender = true): void {
     const record = this.objects.get(id);
     if (!record) return;
@@ -288,6 +334,7 @@ export class Viewer {
     }
   }
 
+  /** Apply per-material uniform overrides to one object. */
   setObjectUniforms(
     id: ViewerObjectId,
     uniforms: ViewerUniformOverrides,
@@ -313,6 +360,7 @@ export class Viewer {
     }
   }
 
+  /** Reset the camera and orbit target to the default view. */
   resetCamera(): void {
     this.camera.position.set(0, 1.5, 4);
     this.camera.lookAt(0, 0, 0);
@@ -321,6 +369,7 @@ export class Viewer {
     this.render();
   }
 
+  /** Set the scene background color, or null for no background. */
   setBackgroundColor(color: number | null): void {
     this.backgroundColor = color;
 
@@ -333,17 +382,20 @@ export class Viewer {
     this.render();
   }
 
+  /** Enable or disable the built-in orbit controls. */
   setControlsEnabled(enabled: boolean): void {
     if (this.controls) {
       this.controls.enabled = enabled;
     }
   }
 
+  /** Render the current scene immediately. */
   render(): void {
     this.updateControls();
     this.renderer.render(this.scene, this.camera);
   }
 
+  /** Dispose renderer resources, controls, and all viewer objects. */
   dispose(): void {
     this.stopRenderLoop();
     this.clearObjects();

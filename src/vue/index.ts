@@ -12,15 +12,27 @@ import {
 import { Viewer } from "../core";
 import type { ViewerObjectState } from "../core";
 
+/** Props accepted by the Vue MeshViewer component. */
 export interface MeshViewerProps {
+  /** Declarative state patches for objects already added to the exposed Viewer. */
   objects?: ViewerObjectState[];
+  /** Scene background color, or null for a transparent background. */
   backgroundColor?: number | null;
+  /** Enable WebGL antialiasing. Defaults to true. */
   antialias?: boolean;
+  /** Enable renderer alpha. Defaults to true. */
   alpha?: boolean;
 }
 
 export { Viewer } from "../core";
 
+/**
+ * Vue component that owns a Viewer instance.
+ *
+ * Add and remove mesh data through the exposed `getViewer()` method, and pass
+ * object transforms, visibility, wireframe, and uniforms through the `objects`
+ * prop.
+ */
 export const MeshViewer = defineComponent({
   name: "MeshViewer",
   props: {
