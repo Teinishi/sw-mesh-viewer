@@ -54,9 +54,20 @@ export const MeshViewer = defineComponent({
     },
   },
   setup(props, { expose }) {
+    const containerRef = ref<HTMLDivElement | null>(null);
     const canvasRef = ref<HTMLCanvasElement | null>(null);
     const viewer = shallowRef<Viewer | null>(null);
+    let resizeObserver: ResizeObserver | null = null;
     let resizeHandler: (() => void) | null = null;
+
+    const resizeViewer = () => {
+      if (!viewer.value || !containerRef.value) return;
+
+      const rect = containerRef.value.getBoundingClientRect();
+      const width = Math.max(1, Math.floor(rect.width || containerRef.value.clientWidth || 320));
+      const height = Math.max(1, Math.floor(rect.height || containerRef.value.clientHeight || 240));
+      viewer.value.resize(width, height);
+    };
 
     const syncViewer = () => {
       const canvas = canvasRef.value;
@@ -70,9 +81,7 @@ export const MeshViewer = defineComponent({
         });
       }
 
-      const width = canvas.clientWidth || 320;
-      const height = canvas.clientHeight || 240;
-      viewer.value.resize(width, height);
+      resizeViewer();
       viewer.value.applyObjectStates(props.objects);
       viewer.value.setBackgroundColor(props.backgroundColor ?? null);
       viewer.value.render();
@@ -86,20 +95,24 @@ export const MeshViewer = defineComponent({
     onMounted(() => {
       nextTick(() => {
         syncViewer();
+
+        if (containerRef.value && typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(() => {
+            resizeViewer();
+          });
+          resizeObserver.observe(containerRef.value);
+        } else {
+          resizeHandler = resizeViewer;
+          window.addEventListener("resize", resizeHandler);
+        }
+
+        resizeViewer();
       });
-
-      resizeHandler = () => {
-        if (!viewer.value || !canvasRef.value) return;
-
-        const width = canvasRef.value.clientWidth || 320;
-        const height = canvasRef.value.clientHeight || 240;
-        viewer.value.resize(width, height);
-      };
-
-      window.addEventListener("resize", resizeHandler);
     });
 
     onBeforeUnmount(() => {
+      resizeObserver?.disconnect();
+
       if (resizeHandler) {
         window.removeEventListener("resize", resizeHandler);
       }
@@ -130,11 +143,25 @@ export const MeshViewer = defineComponent({
     );
 
     return () =>
-      h("div", { class: "sw-mesh-viewer" }, [
+      h("div", { ref: containerRef, class: "sw-mesh-viewer", style: viewerRootStyle }, [
         h("canvas", {
           ref: canvasRef,
           class: "sw-mesh-viewer__canvas",
+          style: viewerCanvasStyle,
         }),
       ]);
   },
 });
+
+const viewerRootStyle = {
+  width: "100%",
+  height: "100%",
+  minWidth: "0",
+  minHeight: "0",
+};
+
+const viewerCanvasStyle = {
+  display: "block",
+  width: "100%",
+  height: "100%",
+};
