@@ -225,6 +225,3 @@ export class MeshBinaryParser {
     return value;
   }
 }
-
-export class MeshDataParser extends MeshBinaryParser {}
-export class MeshParser extends MeshBinaryParser {}

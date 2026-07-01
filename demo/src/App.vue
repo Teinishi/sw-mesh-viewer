@@ -42,6 +42,7 @@ const resetView = () => {
   errorMessage.value = "";
 };
 
+let idCounter = 0;
 const addFiles = async (fileList: FileList | File[]) => {
   const files = Array.from(fileList);
   if (files.length === 0) return;
@@ -54,11 +55,9 @@ const addFiles = async (fileList: FileList | File[]) => {
   for (const file of files) {
     try {
       const data = parser.parse(await file.arrayBuffer());
-      const id = `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`;
-      viewer?.addObject({
-        id,
+      const id = `object-${idCounter++}`;
+      viewer?.addObject(id, data, {
         name: file.name,
-        data,
         visible: true,
       });
       loaded.push({

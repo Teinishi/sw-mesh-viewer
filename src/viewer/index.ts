@@ -9,6 +9,7 @@ import {
   createDefaultOpaqueUniforms,
   createGlassMaterial,
   createOpaqueMaterial,
+  createPhysMaterial,
   createUniformStore,
   type ViewerUniformPatch,
   type ViewerUniformStore,
@@ -47,12 +48,8 @@ export interface ViewerOptions {
 
 /** Options for adding a parsed mesh object to a Viewer. */
 export interface AddViewerObjectOptions {
-  /** Unique object id supplied by the application. */
-  id: ViewerObjectId;
   /** Optional display/debug name assigned to the root Three.js object. */
   name?: string;
-  /** Parsed mesh or physics mesh data to render. */
-  data: MeshData;
   /** Initial transform matrix. */
   matrix?: ViewerObjectMatrix;
   /** Initial visibility. Defaults to true. */
@@ -191,13 +188,12 @@ export class Viewer {
   }
 
   /** Add parsed mesh data as a new object and return its id. */
-  addObject(options: AddViewerObjectOptions): ViewerObjectId {
-    const id = options.id;
+  addObject(id: ViewerObjectId, data: MeshData, options: AddViewerObjectOptions): ViewerObjectId {
     if (this.objects.has(id)) {
       throw new Error(`Viewer object already exists: ${id}`);
     }
 
-    const created = this.createObjectFromMeshData(options.data, options.uniforms);
+    const created = this.createObjectFromMeshData(data, options.uniforms);
     created.root.name = options.name ?? id;
     created.root.visible = options.visible ?? true;
     created.root.matrixAutoUpdate = false;
@@ -438,9 +434,9 @@ export class Viewer {
   ): CreatedObject {
     if (mesh.kind === "mesh") {
       return this.createRenderMesh(mesh, uniforms);
+    } else {
+      return this.createPhysMeshGroup(mesh, uniforms);
     }
-
-    return this.createPhysMeshGroup(mesh, uniforms);
   }
 
   private createRenderMesh(mesh: MeshFile, uniforms: ViewerUniformOverrides): CreatedObject {
@@ -489,7 +485,7 @@ export class Viewer {
   private createPhysMeshGroup(mesh: PhysFile, uniforms: ViewerUniformOverrides): CreatedObject {
     const group = new THREE.Group();
     const uniformStores = this.createUniformStores(uniforms);
-    const material = createOpaqueMaterial(uniformStores.opaque);
+    const material = createPhysMaterial(uniformStores.opaque);
     const meshes: THREE.Mesh[] = [];
 
     mesh.subPhysMeshes.forEach((submesh) => {
@@ -504,7 +500,20 @@ export class Viewer {
       });
 
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      geometry.setIndex(this.createReversedTriangleIndices(submesh.indices));
+      if (submesh.indices.length > 0) {
+        geometry.setIndex(this.createReversedTriangleIndices(submesh.indices));
+      } else {
+        geometry.setIndex(
+          Array.from({ length: submesh.vertices.length })
+            .fill(null)
+            .map((_, i) => {
+              const r = i % 3;
+              if (r === 0) return i;
+              else if (r === 1) return i + 1;
+              else return i - 1;
+            }),
+        );
+      }
       geometry.computeVertexNormals();
       geometry.computeBoundingSphere();
 
