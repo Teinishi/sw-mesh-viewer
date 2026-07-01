@@ -5,5 +5,10 @@ export default defineConfig({
     tsgo: true,
   },
   exports: true,
-  // ...config options
+  entry: {
+    index: "src/index.ts",
+    parser: "src/parser/index.ts",
+    viewer: "src/viewer/index.ts",
+    vue: "src/vue/index.ts",
+  },
 });

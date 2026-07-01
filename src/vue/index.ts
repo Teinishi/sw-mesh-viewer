@@ -9,8 +9,8 @@ import {
   watch,
   type PropType,
 } from "vue";
-import { Viewer } from "../core";
-import type { ViewerObjectState } from "../core";
+import { Viewer } from "../viewer";
+import type { ViewerObjectState } from "../viewer";
 
 /** Props accepted by the Vue MeshViewer component. */
 export interface MeshViewerProps {
@@ -24,7 +24,8 @@ export interface MeshViewerProps {
   alpha?: boolean;
 }
 
-export { Viewer } from "../core";
+export { Viewer } from "../viewer";
+export type { ViewerObjectState } from "../viewer";
 
 /**
  * Vue component that owns a Viewer instance.

@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import {
-  MeshBinaryParser,
-  MeshViewer,
-  Viewer,
-  type MeshData,
-  type ViewerObjectState,
-} from "../../src";
+import { MeshBinaryParser, type MeshData } from "../../src";
+import { Viewer, MeshViewer, type ViewerObjectState } from "../../src/vue";
 
 interface MeshViewerExpose {
   getViewer: () => Viewer | null;

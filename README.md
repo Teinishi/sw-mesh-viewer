@@ -13,7 +13,7 @@ updated separately.
 npm install github:Teinishi/sw-mesh-viewer
 ```
 
-## Core Usage
+## Viewer Usage
 
 ```ts
 import * as THREE from "three";
@@ -50,28 +50,28 @@ viewer.render();
 
 ```html
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { MeshBinaryParser, MeshViewer, Viewer, type ViewerObjectState } from "sw-mesh-viewer";
+  import { computed, ref } from "vue";
+  import { MeshBinaryParser, MeshViewer, Viewer, type ViewerObjectState } from "sw-mesh-viewer";
 
-const meshViewer = ref<{ getViewer: () => Viewer | null } | null>(null);
-const visible = ref(true);
+  const meshViewer = ref<{ getViewer: () => Viewer | null } | null>(null);
+  const visible = ref(true);
 
-const objects = computed<ViewerObjectState[]>(() => [
-  {
-    id: "body",
-    visible: visible.value,
-    wireframe: false,
-  },
-]);
+  const objects = computed<ViewerObjectState[]>(() => [
+    {
+      id: "body",
+      visible: visible.value,
+      wireframe: false,
+    },
+  ]);
 
-async function addFile(file: File) {
-  const data = new MeshBinaryParser().parse(await file.arrayBuffer());
-  meshViewer.value?.getViewer()?.addObject({
-    id: "body",
-    name: file.name,
-    data,
-  });
-}
+  async function addFile(file: File) {
+    const data = new MeshBinaryParser().parse(await file.arrayBuffer());
+    meshViewer.value?.getViewer()?.addObject({
+      id: "body",
+      name: file.name,
+      data,
+    });
+  }
 </script>
 
 <template>
