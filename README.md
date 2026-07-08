@@ -1,5 +1,9 @@
 # sw-mesh-viewer
 
+[Visit demo](https://teinishi.github.io/sw-mesh-viewer/)
+
+[Visit docs](https://teinishi.github.io/sw-mesh-viewer/docs/)
+
 Stormworks mesh parser and Three.js utilities.
 
 This package parses `mesh` and `phys` binary files and turns them into
@@ -77,25 +81,25 @@ on unmount.
 
 ```html
 <script setup lang="ts">
-import { ref } from "vue";
-import { TresCanvas } from "@tresjs/core";
-import { OrbitControls } from "@tresjs/cientos";
-import { parseMeshData, type MeshData } from "sw-mesh-viewer";
-import { createStormworksLightGroup, type StormworksUniforms } from "sw-mesh-viewer/viewer";
-import { SwMeshPrimitive } from "sw-mesh-viewer/vue";
+  import { ref } from "vue";
+  import { TresCanvas } from "@tresjs/core";
+  import { OrbitControls } from "@tresjs/cientos";
+  import { parseMeshData, type MeshData } from "sw-mesh-viewer";
+  import { createStormworksLightGroup, type StormworksUniforms } from "sw-mesh-viewer/viewer";
+  import { SwMeshPrimitive } from "sw-mesh-viewer/vue";
 
-const data = ref<MeshData | null>(null);
-const lights = createStormworksLightGroup();
-const uniforms = ref<StormworksUniforms>({
-  opaque: {
-    overrideColor: { type: "int", value: 1 },
-    overrideColor1: { type: "vec4", value: [1, 1, 1, 1] },
-  },
-});
+  const data = ref<MeshData | null>(null);
+  const lights = createStormworksLightGroup();
+  const uniforms = ref<StormworksUniforms>({
+    opaque: {
+      overrideColor: { type: "int", value: 1 },
+      overrideColor1: { type: "vec4", value: [1, 1, 1, 1] },
+    },
+  });
 
-async function loadFile(file: File) {
-  data.value = parseMeshData(await file.arrayBuffer());
-}
+  async function loadFile(file: File) {
+    data.value = parseMeshData(await file.arrayBuffer());
+  }
 </script>
 
 <template>
