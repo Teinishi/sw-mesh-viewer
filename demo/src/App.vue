@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { Vector3 } from "three";
 import { OrbitControls } from "@tresjs/cientos";
 import { TresCanvas } from "@tresjs/core";
 import { parseMeshData, type MeshData } from "../../src";
@@ -15,7 +16,6 @@ interface DemoObject {
   visible: boolean;
 }
 
-const backgroundColor = ref<number | null>(0x111827);
 const objects = ref<DemoObject[]>([]);
 const isDragging = ref(false);
 const errorMessage = ref("");
@@ -24,7 +24,6 @@ const objectColor = ref("#ffffff");
 const lightGroup = createStormworksLightGroup();
 
 const visibleCount = computed(() => objects.value.filter((object) => object.visible).length);
-const canvasClearColor = computed(() => backgroundColor.value ?? "transparent");
 const objectColorVec4 = computed<[number, number, number, number]>(() => [
   parseInt(objectColor.value.slice(1, 3), 16) / 255,
   parseInt(objectColor.value.slice(3, 5), 16) / 255,
@@ -41,12 +40,7 @@ const uniforms = computed<StormworksUniforms>(() => ({
   },
 }));
 
-const toggleBackground = () => {
-  backgroundColor.value = backgroundColor.value === null ? 0x111827 : null;
-};
-
 const resetView = () => {
-  backgroundColor.value = 0x111827;
   wireframe.value = false;
   objectColor.value = "#ffffff";
   objects.value = objects.value.map((object) => ({ ...object, visible: true }));
@@ -127,7 +121,6 @@ const formatBytes = (size: number) => {
             <input v-model="wireframe" type="checkbox" />
             <span>Wireframe</span>
           </label>
-          <button type="button" @click="toggleBackground">Toggle background</button>
           <button type="button" @click="resetView">Reset</button>
         </div>
       </div>
@@ -178,8 +171,8 @@ const formatBytes = (size: number) => {
         </aside>
 
         <div class="viewer-frame">
-          <TresCanvas :clear-color="canvasClearColor" :alpha="backgroundColor === null">
-            <TresPerspectiveCamera :position="[0, 1.5, 4]" :look-at="[0, 0, 0]" />
+          <TresCanvas>
+            <TresPerspectiveCamera :position="new Vector3(0, 1.5, 4)" :look-at="[0, 0, 0]" />
             <OrbitControls />
             <primitive :object="lightGroup" />
             <SwMeshPrimitive
