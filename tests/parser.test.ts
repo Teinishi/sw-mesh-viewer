@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MeshBinaryParser } from "../src/parser";
+import { parseMeshData } from "../src/parser";
 
 function writeFloat32LE(view: DataView, offset: number, value: number): number {
   view.setFloat32(offset, value, true);
@@ -76,10 +76,9 @@ function writeAscii(view: DataView, offset: number, value: string): number {
   return offset + value.length;
 }
 
-describe("MeshBinaryParser", () => {
+describe("parseMeshData", () => {
   it("parses a mesh file from a Uint8Array", () => {
-    const parser = new MeshBinaryParser();
-    const parsed = parser.parse(buildMeshBytes());
+    const parsed = parseMeshData(buildMeshBytes());
 
     expect(parsed.kind).toBe("mesh");
     if (parsed.kind !== "mesh") return;

@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { OrbitControls } from "@tresjs/cientos";
 import { TresCanvas } from "@tresjs/core";
-import { MeshBinaryParser, type MeshData } from "../../src";
+import { parseMeshData, type MeshData } from "../../src";
 import { createStormworksLightGroup, type StormworksUniforms } from "../../src/viewer";
 import { SwMeshPrimitive } from "../../src/vue";
 
@@ -58,13 +58,12 @@ const addFiles = async (fileList: FileList | File[]) => {
   const files = Array.from(fileList);
   if (files.length === 0) return;
 
-  const parser = new MeshBinaryParser();
   const loaded: DemoObject[] = [];
   const failed: string[] = [];
 
   for (const file of files) {
     try {
-      const data = parser.parse(await file.arrayBuffer());
+      const data = parseMeshData(await file.arrayBuffer());
       loaded.push({
         id: `object-${idCounter++}`,
         name: file.name,

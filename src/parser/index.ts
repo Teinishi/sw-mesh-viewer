@@ -1,22 +1,32 @@
 /** A three-dimensional vector stored in a parsed mesh file. */
 export interface MeshVec3 {
+  /** X coordinate. */
   x: number;
+  /** Y coordinate. */
   y: number;
+  /** Z coordinate. */
   z: number;
 }
 
 /** A per-vertex RGBA color stored as 8-bit channel values. */
 export interface MeshColor4 {
+  /** Red channel, from `0` to `255`. */
   r: number;
+  /** Green channel, from `0` to `255`. */
   g: number;
+  /** Blue channel, from `0` to `255`. */
   b: number;
+  /** Alpha channel, from `0` to `255`. */
   a: number;
 }
 
 /** A render mesh vertex with position, color, and normal data. */
 export interface MeshVertex {
+  /** Vertex position in Stormworks mesh coordinates. */
   position: MeshVec3;
+  /** Vertex color stored in the mesh file. */
   color: MeshColor4;
+  /** Vertex normal vector. */
   normal: MeshVec3;
 }
 
@@ -28,33 +38,47 @@ export interface SubMesh {
   indexBufferLength: number;
   /** Material selector: 0 = opaque, 1 = glass, 2 = additive. */
   shaderId: number;
+  /** Minimum corner of the submesh bounds. */
   boundsMin: MeshVec3;
+  /** Maximum corner of the submesh bounds. */
   boundsMax: MeshVec3;
+  /** Submesh name stored in the file. */
   name: string;
 }
 
 /** Parsed render mesh data. */
 export interface MeshFile {
+  /** Discriminant used to distinguish render mesh data from physics mesh data. */
   kind: "mesh";
+  /** Vertex records used by the render mesh. */
   vertices: MeshVertex[];
+  /** Triangle index buffer referencing `vertices`. */
   indices: number[];
+  /** Material ranges over the index buffer. */
   submeshes: SubMesh[];
 }
 
 /** A collision/physics mesh section. */
 export interface PhysMesh {
+  /** Physics mesh vertex positions. */
   vertices: MeshVec3[];
+  /** Triangle index buffer referencing `vertices`. */
   indices: number[];
 }
 
 /** Parsed physics mesh data. */
 export interface PhysFile {
+  /** Discriminant used to distinguish physics mesh data from render mesh data. */
   kind: "phys";
+  /** Physics mesh sections stored in the file. */
   subPhysMeshes: PhysMesh[];
 }
 
 /** Any parsed Stormworks mesh-related file supported by this package. */
 export type MeshData = MeshFile | PhysFile;
+
+/** Binary input accepted by the Stormworks mesh parser. */
+export type MeshBinaryInput = ArrayBuffer | ArrayBufferView | Uint8Array;
 
 function toUint8Array(input: ArrayBuffer | ArrayBufferView | Uint8Array): Uint8Array {
   if (input instanceof Uint8Array) {
@@ -72,13 +96,22 @@ function toUint8Array(input: ArrayBuffer | ArrayBufferView | Uint8Array): Uint8A
   throw new TypeError("Unsupported input type for mesh parser");
 }
 
-/** Binary parser for Stormworks mesh and physics mesh files. */
-export class MeshBinaryParser {
+/**
+ * Parse a `mesh` or `phys` binary payload into structured mesh data.
+ *
+ * The input may be an `ArrayBuffer`, a typed array, or any `ArrayBufferView`.
+ * Unsupported file signatures throw an error.
+ */
+export function parseMeshData(input: MeshBinaryInput): MeshData {
+  return new MeshBinaryParser().parse(input);
+}
+
+/** Internal stateful parser used by the public `parseMeshData` function. */
+class MeshBinaryParser {
   private view!: DataView;
   private offset = 0;
 
-  /** Parse a mesh or phys binary payload into structured mesh data. */
-  parse(input: ArrayBuffer | ArrayBufferView | Uint8Array): MeshData {
+  parse(input: MeshBinaryInput): MeshData {
     const bytes = toUint8Array(input);
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.offset = 0;

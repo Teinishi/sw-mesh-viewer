@@ -17,7 +17,7 @@ npm install github:Teinishi/sw-mesh-viewer
 
 ```ts
 import * as THREE from "three";
-import { MeshBinaryParser } from "sw-mesh-viewer";
+import { parseMeshData } from "sw-mesh-viewer";
 import {
   createStormworksLights,
   createStormworksObject,
@@ -28,7 +28,7 @@ const scene = new THREE.Scene();
 scene.add(...createStormworksLights());
 
 const file = await fetch("/example.mesh").then((response) => response.arrayBuffer());
-const data = new MeshBinaryParser().parse(file);
+const data = parseMeshData(file);
 const object = createStormworksObject(data, { name: "example.mesh" });
 
 scene.add(object);
@@ -80,7 +80,7 @@ on unmount.
 import { ref } from "vue";
 import { TresCanvas } from "@tresjs/core";
 import { OrbitControls } from "@tresjs/cientos";
-import { MeshBinaryParser, type MeshData } from "sw-mesh-viewer";
+import { parseMeshData, type MeshData } from "sw-mesh-viewer";
 import { createStormworksLightGroup, type StormworksUniforms } from "sw-mesh-viewer/viewer";
 import { SwMeshPrimitive } from "sw-mesh-viewer/vue";
 
@@ -94,7 +94,7 @@ const uniforms = ref<StormworksUniforms>({
 });
 
 async function loadFile(file: File) {
-  data.value = new MeshBinaryParser().parse(await file.arrayBuffer());
+  data.value = parseMeshData(await file.arrayBuffer());
 }
 </script>
 
