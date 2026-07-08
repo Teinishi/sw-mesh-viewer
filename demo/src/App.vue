@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Vector3 } from "three";
+import * as THREE from "three";
 import { OrbitControls } from "@tresjs/cientos";
 import { TresCanvas } from "@tresjs/core";
 import { parseMeshData, type MeshData } from "../../src";
@@ -22,6 +22,12 @@ const errorMessage = ref("");
 const wireframe = ref(false);
 const objectColor = ref("#ffffff");
 const lightGroup = createStormworksLightGroup();
+
+const orbitMouseButtons = {
+  LEFT: undefined,
+  MIDDLE: THREE.MOUSE.PAN,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
 
 const visibleCount = computed(() => objects.value.filter((object) => object.visible).length);
 const objectColorVec4 = computed<[number, number, number, number]>(() => [
@@ -171,9 +177,9 @@ const formatBytes = (size: number) => {
         </aside>
 
         <div class="viewer-frame">
-          <TresCanvas>
-            <TresPerspectiveCamera :position="new Vector3(0, 1.5, 4)" :look-at="[0, 0, 0]" />
-            <OrbitControls />
+          <TresCanvas clear-color="#ffffff">
+            <TresPerspectiveCamera />
+            <OrbitControls :enable-damping="false" :mouse-buttons="orbitMouseButtons" />
             <primitive :object="lightGroup" />
             <SwMeshPrimitive
               v-for="object in objects"
@@ -203,8 +209,8 @@ const formatBytes = (size: number) => {
   display: grid;
   place-items: center;
   padding: 24px;
-  color: #e5e7eb;
-  background: #10131a;
+  color: #1f2937;
+  background: #f1f5f9;
   font-family:
     Inter,
     system-ui,
@@ -224,11 +230,11 @@ const formatBytes = (size: number) => {
   min-height: 640px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid #dbe3ef;
   border-radius: 8px;
   padding: 24px;
-  background: #171b24;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
 }
 
 .demo-header {
@@ -246,7 +252,7 @@ const formatBytes = (size: number) => {
 
 .demo-header p {
   margin: 0;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .demo-controls {
@@ -265,8 +271,8 @@ button {
   border: 0;
   border-radius: 6px;
   padding: 8px 14px;
-  background: #2dd4bf;
-  color: #062622;
+  background: #0f766e;
+  color: #ffffff;
   cursor: pointer;
 }
 
@@ -283,7 +289,7 @@ button:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #cbd5e1;
+  color: #334155;
   font-size: 0.86rem;
 }
 
@@ -308,15 +314,15 @@ button:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid #dbe3ef;
   border-radius: 8px;
   padding: 16px;
-  background: #111827;
+  background: #f8fafc;
 }
 
 .object-panel--dragging {
-  border-color: #2dd4bf;
-  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.65);
+  border-color: #0f766e;
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.45);
 }
 
 .object-panel__header {
@@ -334,7 +340,7 @@ button:hover {
 
 .object-panel__header p {
   margin: 0;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 0.875rem;
 }
 
@@ -344,12 +350,12 @@ button:hover {
   place-items: center;
   min-height: 116px;
   padding: 16px;
-  border: 1px dashed rgba(148, 163, 184, 0.65);
+  border: 1px dashed #94a3b8;
   border-radius: 8px;
-  color: #f8fafc;
+  color: #1e293b;
   cursor: pointer;
   text-align: center;
-  background: #0f172a;
+  background: #ffffff;
 }
 
 .drop-zone input {
@@ -361,12 +367,12 @@ button:hover {
 }
 
 .drop-zone small {
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .error-message {
   margin: 12px 0 0;
-  color: #fda4af;
+  color: #be123c;
   font-size: 0.875rem;
 }
 
@@ -390,13 +396,13 @@ button:hover {
   min-height: 52px;
   padding: 8px;
   border-radius: 8px;
-  background: #1f2937;
+  background: #eef2f7;
 }
 
 .object-list__item button {
   padding: 6px 10px;
-  background: #334155;
-  color: #e5e7eb;
+  background: #dbe3ef;
+  color: #1f2937;
 }
 
 .object-list__text {
@@ -416,7 +422,7 @@ button:hover {
 }
 
 .object-list__text span {
-  color: #94a3b8;
+  color: #64748b;
   font-size: 0.8rem;
 }
 
@@ -424,7 +430,7 @@ button:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #cbd5e1;
+  color: #334155;
   font-size: 0.78rem;
   cursor: pointer;
 }
@@ -433,22 +439,21 @@ button:hover {
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: #2dd4bf;
+  accent-color: #0f766e;
   cursor: pointer;
 }
 
 .empty-state {
   margin: 16px 0 0;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 0.9rem;
 }
 
 .viewer-frame {
   min-height: 560px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid #dbe3ef;
   border-radius: 8px;
   overflow: hidden;
-  background: #020617;
 }
 
 .viewer-frame > * {
