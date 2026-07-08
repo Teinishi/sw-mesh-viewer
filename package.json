@@ -33,7 +33,7 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
-  "dependencies": {
+  "peerDependencies": {
     "three": "^0.185.0",
     "vue": "^3.5.39"
   },

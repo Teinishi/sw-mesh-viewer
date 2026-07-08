@@ -1,11 +1,11 @@
 # sw-mesh-viewer
 
-Stormworks mesh parser and Three.js viewer utilities.
+Stormworks mesh parser and Three.js utilities.
 
-This package parses `mesh` and `phys` binary files and renders them with
-Three.js. Objects are added and removed imperatively, while frequently changed
-state such as transforms, visibility, wireframe mode, and shader uniforms can be
-updated separately.
+This package parses `mesh` and `phys` binary files and turns them into
+Three.js objects, materials, and lights. It does not own a canvas, renderer,
+scene, camera, or controls. Those runtime concerns stay in your app or in a
+renderer such as TresJS.
 
 ## Installation
 
@@ -13,25 +13,41 @@ updated separately.
 npm install github:Teinishi/sw-mesh-viewer
 ```
 
-## Viewer Usage
+## Three.js Usage
 
 ```ts
 import * as THREE from "three";
-import { MeshBinaryParser, Viewer } from "sw-mesh-viewer";
+import { MeshBinaryParser } from "sw-mesh-viewer";
+import {
+  createStormworksLights,
+  createStormworksObject,
+  disposeStormworksObject,
+} from "sw-mesh-viewer/viewer";
 
-const canvas = document.querySelector("canvas")!;
-const viewer = new Viewer(canvas, {
-  backgroundColor: 0x111827,
-});
+const scene = new THREE.Scene();
+scene.add(...createStormworksLights());
 
 const file = await fetch("/example.mesh").then((response) => response.arrayBuffer());
 const data = new MeshBinaryParser().parse(file);
+const object = createStormworksObject(data, { name: "example.mesh" });
 
-viewer.addObject({
-  id: "example",
-  name: "example.mesh",
-  data,
-  matrix: new THREE.Matrix4().makeTranslation(0, 0, 0),
+scene.add(object);
+
+// Later, when your app removes the object:
+scene.remove(object);
+disposeStormworksObject(object);
+```
+
+## Materials And Uniforms
+
+```ts
+import {
+  applyStormworksUniforms,
+  createStormworksMaterials,
+  createStormworksObject,
+} from "sw-mesh-viewer/viewer";
+
+const materials = createStormworksMaterials({
   uniforms: {
     opaque: {
       overrideColor: { type: "int", value: 1 },
@@ -40,48 +56,61 @@ viewer.addObject({
   },
 });
 
-viewer.setObjectVisible("example", true);
-viewer.setObjectWireframe("example", false);
-viewer.resize(canvas.clientWidth, canvas.clientHeight);
-viewer.render();
+const object = createStormworksObject(data, { materials });
+
+applyStormworksUniforms(materials, {
+  opaque: {
+    overrideColor1: { type: "vec4", value: [1, 0.53, 0.27, 1] },
+  },
+});
 ```
 
-## Vue Usage
+If you share one material set across multiple objects, uniform changes affect
+all objects using that set. Create one material set per object when each object
+needs independent color or shader state.
 
-```html
+## Vue And TresJS Usage
+
+`SwMeshPrimitive` is a thin TresJS wrapper. It renders a TresJS `primitive`,
+updates uniforms from props, and disposes internally created geometry/materials
+on unmount.
+
+```vue
 <script setup lang="ts">
-  import { computed, ref } from "vue";
-  import { MeshBinaryParser, MeshViewer, Viewer, type ViewerObjectState } from "sw-mesh-viewer";
+import { ref } from "vue";
+import { TresCanvas } from "@tresjs/core";
+import { OrbitControls } from "@tresjs/cientos";
+import { MeshBinaryParser, type MeshData } from "sw-mesh-viewer";
+import { createStormworksLightGroup, type StormworksUniforms } from "sw-mesh-viewer/viewer";
+import { SwMeshPrimitive } from "sw-mesh-viewer/vue";
 
-  const meshViewer = ref<{ getViewer: () => Viewer | null } | null>(null);
-  const visible = ref(true);
+const data = ref<MeshData | null>(null);
+const lights = createStormworksLightGroup();
+const uniforms = ref<StormworksUniforms>({
+  opaque: {
+    overrideColor: { type: "int", value: 1 },
+    overrideColor1: { type: "vec4", value: [1, 1, 1, 1] },
+  },
+});
 
-  const objects = computed<ViewerObjectState[]>(() => [
-    {
-      id: "body",
-      visible: visible.value,
-      wireframe: false,
-    },
-  ]);
-
-  async function addFile(file: File) {
-    const data = new MeshBinaryParser().parse(await file.arrayBuffer());
-    meshViewer.value?.getViewer()?.addObject({
-      id: "body",
-      name: file.name,
-      data,
-    });
-  }
+async function loadFile(file: File) {
+  data.value = new MeshBinaryParser().parse(await file.arrayBuffer());
+}
 </script>
 
 <template>
-  <MeshViewer ref="meshViewer" :objects="objects" :background-color="0x111827" />
+  <TresCanvas clear-color="#111827">
+    <TresPerspectiveCamera :position="[0, 1.5, 4]" />
+    <OrbitControls />
+    <primitive :object="lights" />
+    <SwMeshPrimitive v-if="data" :data="data" :uniforms="uniforms" />
+  </TresCanvas>
 </template>
 ```
 
-Use the exposed `Viewer` instance for object lifetime operations such as
-`addObject`, `removeObject`, and `clearObjects`. Use the `objects` prop for
-state updates that may change often.
+When you pass your own `materials` prop to `SwMeshPrimitive`, the component
+does not dispose those external materials unless `dispose-external-materials`
+is explicitly enabled.
 
 ## Development
 
