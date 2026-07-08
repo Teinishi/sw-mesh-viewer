@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Vector3 } from "three";
+import * as THREE from "three";
 import { OrbitControls } from "@tresjs/cientos";
 import { TresCanvas } from "@tresjs/core";
 import { parseMeshData, type MeshData } from "../../src";
@@ -22,6 +22,12 @@ const errorMessage = ref("");
 const wireframe = ref(false);
 const objectColor = ref("#ffffff");
 const lightGroup = createStormworksLightGroup();
+
+const orbitMouseButtons = {
+  LEFT: undefined,
+  MIDDLE: THREE.MOUSE.PAN,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
 
 const visibleCount = computed(() => objects.value.filter((object) => object.visible).length);
 const objectColorVec4 = computed<[number, number, number, number]>(() => [
@@ -172,8 +178,8 @@ const formatBytes = (size: number) => {
 
         <div class="viewer-frame">
           <TresCanvas>
-            <TresPerspectiveCamera :position="new Vector3(0, 1.5, 4)" :look-at="[0, 0, 0]" />
-            <OrbitControls />
+            <TresPerspectiveCamera />
+            <OrbitControls :enable-damping="false" :mouse-buttons="orbitMouseButtons" />
             <primitive :object="lightGroup" />
             <SwMeshPrimitive
               v-for="object in objects"
