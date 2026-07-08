@@ -75,7 +75,7 @@ needs independent color or shader state.
 updates uniforms from props, and disposes internally created geometry/materials
 on unmount.
 
-```vue
+```html
 <script setup lang="ts">
 import { ref } from "vue";
 import { TresCanvas } from "@tresjs/core";
