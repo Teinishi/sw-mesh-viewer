@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import { AMBIENT_COLOR_HIGH, AMBIENT_COLOR_LOW } from "./shaders";
+
+const AMBIENT_COLOR_HIGH = new THREE.Color(118.0 / 255.0, 142.0 / 255.0, 190.0 / 255.0);
+const AMBIENT_COLOR_LOW = new THREE.Color(11.0 / 255.0, 16.0 / 255.0, 44.0 / 255.0);
 
 /** Options used when creating the default Stormworks-style lights. */
 export interface CreateStormworksLightsOptions {
@@ -17,7 +19,7 @@ export interface CreateStormworksLightsOptions {
  */
 export function createStormworksLights(
   options: CreateStormworksLightsOptions = {},
-): THREE.Object3D[] {
+): [THREE.HemisphereLight, THREE.DirectionalLight] {
   const hemi = new THREE.HemisphereLight(
     AMBIENT_COLOR_HIGH,
     AMBIENT_COLOR_LOW,

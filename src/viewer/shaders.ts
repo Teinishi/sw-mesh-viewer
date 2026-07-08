@@ -15,11 +15,6 @@ export type StormworksUniformPatch = Record<string, StormworksUniformValue>;
 /** Mutable Three.js uniform references used by viewer-owned materials. */
 export type StormworksUniformStore = Record<string, THREE.IUniform>;
 
-/** Upper hemisphere light color used by the default viewer lighting. */
-export const AMBIENT_COLOR_HIGH = new THREE.Color(118.0 / 255.0, 142.0 / 255.0, 190.0 / 255.0);
-
-/** Lower hemisphere light color used by the default viewer lighting. */
-export const AMBIENT_COLOR_LOW = new THREE.Color(11.0 / 255.0, 16.0 / 255.0, 44.0 / 255.0);
 const SKY_COLOR_UP = new THREE.Color(0.0, 61.0 / 255.0, 182.0 / 255.0);
 const SKY_COLOR_DOWN = new THREE.Color(139.0 / 255.0, 210.0 / 255.0, 207.0 / 255.0);
 
