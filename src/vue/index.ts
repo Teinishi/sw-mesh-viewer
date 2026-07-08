@@ -1,168 +1,202 @@
+import * as THREE from "three";
 import {
+  computed,
   defineComponent,
   h,
-  nextTick,
   onBeforeUnmount,
-  onMounted,
-  ref,
   shallowRef,
   watch,
   type PropType,
 } from "vue";
-import { Viewer } from "../viewer";
-import type { ViewerObjectState } from "../viewer";
+import type { MeshData } from "../parser";
+import {
+  applyStormworksUniforms,
+  createStormworksMaterials,
+  createStormworksObject,
+  disposeStormworksObject,
+  setStormworksWireframe,
+  type StormworksMaterialSet,
+  type StormworksUniforms,
+} from "../viewer";
 
-/** Props accepted by the Vue MeshViewer component. */
-export interface MeshViewerProps {
-  /** Declarative state patches for objects already added to the exposed Viewer. */
-  objects?: ViewerObjectState[];
-  /** Scene background color, or null for a transparent background. */
-  backgroundColor?: number | null;
-  /** Enable WebGL antialiasing. Defaults to true. */
-  antialias?: boolean;
-  /** Enable renderer alpha. Defaults to true. */
-  alpha?: boolean;
+/** Props accepted by the TresJS-compatible Stormworks mesh primitive. */
+export interface SwMeshPrimitiveProps {
+  /** Parsed Stormworks mesh or physics mesh data to render. */
+  data: MeshData;
+  /** Optional display name assigned to the created Three.js object. */
+  name?: string;
+  /** Uniform patches applied to the component's active material set. */
+  uniforms?: StormworksUniforms;
+  /** Enable wireframe mode on materials that support it. */
+  wireframe?: boolean;
+  /** Visibility applied to the created root object. */
+  visible?: boolean;
+  /**
+   * Optional external material set.
+   *
+   * When omitted, the component creates and owns a fresh material set.
+   */
+  materials?: StormworksMaterialSet;
+  /** Dispose resources created for the current object on replacement or unmount. Defaults to `true`. */
+  dispose?: boolean;
+  /**
+   * Dispose externally supplied materials when the object is replaced or unmounted.
+   *
+   * This is disabled by default because external materials are often shared by
+   * the parent application.
+   */
+  disposeExternalMaterials?: boolean;
 }
 
-export { Viewer } from "../viewer";
-export type { ViewerObjectState } from "../viewer";
-
 /**
- * Vue component that owns a Viewer instance.
+ * Render parsed Stormworks mesh data as a TresJS primitive.
  *
- * Add and remove mesh data through the exposed `getViewer()` method, and pass
- * object transforms, visibility, wireframe, and uniforms through the `objects`
- * prop.
+ * The component creates a Three.js object from `data`, updates uniforms and
+ * wireframe state from props, and disposes internally created resources when
+ * the object is replaced or the component unmounts.
  */
-export const MeshViewer = defineComponent({
-  name: "MeshViewer",
+export const SwMeshPrimitive = defineComponent({
+  name: "SwMeshPrimitive",
   props: {
-    objects: {
-      type: Array as PropType<ViewerObjectState[]>,
-      default: () => [],
+    data: {
+      type: Object as PropType<MeshData>,
+      required: true,
     },
-    backgroundColor: {
-      type: [Number, null] as PropType<number | null>,
-      default: null,
+    name: {
+      type: String,
+      default: "",
     },
-    antialias: {
+    uniforms: {
+      type: Object as PropType<StormworksUniforms>,
+      default: () => ({}),
+    },
+    wireframe: {
+      type: Boolean,
+      default: false,
+    },
+    visible: {
       type: Boolean,
       default: true,
     },
-    alpha: {
+    materials: {
+      type: Object as PropType<StormworksMaterialSet | undefined>,
+      default: undefined,
+    },
+    dispose: {
       type: Boolean,
       default: true,
+    },
+    disposeExternalMaterials: {
+      type: Boolean,
+      default: false,
     },
   },
   setup(props, { expose }) {
-    const containerRef = ref<HTMLDivElement | null>(null);
-    const canvasRef = ref<HTMLCanvasElement | null>(null);
-    const viewer = shallowRef<Viewer | null>(null);
-    let resizeObserver: ResizeObserver | null = null;
-    let resizeHandler: (() => void) | null = null;
+    const objectRef = shallowRef<THREE.Object3D | null>(null);
+    const ownedMaterialsRef = shallowRef<StormworksMaterialSet | null>(null);
+    const objectOwnsMaterialsRef = shallowRef(false);
 
-    const resizeViewer = () => {
-      if (!viewer.value || !containerRef.value) return;
+    const activeMaterials = computed(() => props.materials ?? ownedMaterialsRef.value);
 
-      const rect = containerRef.value.getBoundingClientRect();
-      const width = Math.max(1, Math.floor(rect.width || containerRef.value.clientWidth || 320));
-      const height = Math.max(1, Math.floor(rect.height || containerRef.value.clientHeight || 240));
-      viewer.value.resize(width, height);
-    };
+    const disposeCurrentObject = () => {
+      const object = objectRef.value;
+      if (!object || !props.dispose) return;
 
-    const syncViewer = () => {
-      const canvas = canvasRef.value;
-      if (!canvas) return;
-
-      if (!viewer.value) {
-        viewer.value = new Viewer(canvas, {
-          antialias: props.antialias,
-          alpha: props.alpha,
-          backgroundColor: props.backgroundColor,
-        });
-      }
-
-      resizeViewer();
-      viewer.value.applyObjectStates(props.objects);
-      viewer.value.setBackgroundColor(props.backgroundColor ?? null);
-      viewer.value.render();
-    };
-
-    expose({
-      viewer,
-      getViewer: () => viewer.value,
-    });
-
-    onMounted(() => {
-      nextTick(() => {
-        syncViewer();
-
-        if (containerRef.value && typeof ResizeObserver !== "undefined") {
-          resizeObserver = new ResizeObserver(() => {
-            resizeViewer();
-          });
-          resizeObserver.observe(containerRef.value);
-        } else {
-          resizeHandler = resizeViewer;
-          window.addEventListener("resize", resizeHandler);
-        }
-
-        resizeViewer();
+      disposeStormworksObject(object, {
+        disposeMaterial: objectOwnsMaterialsRef.value || props.disposeExternalMaterials,
       });
-    });
+    };
 
-    onBeforeUnmount(() => {
-      resizeObserver?.disconnect();
+    const createObject = () => {
+      disposeCurrentObject();
 
-      if (resizeHandler) {
-        window.removeEventListener("resize", resizeHandler);
-      }
+      const materials = props.materials ?? createStormworksMaterials({ uniforms: props.uniforms });
+      ownedMaterialsRef.value = props.materials ? null : materials;
+      objectOwnsMaterialsRef.value = !props.materials;
+      objectRef.value = createStormworksObject(props.data, {
+        name: props.name,
+        materials,
+      });
+      objectRef.value.visible = props.visible;
+      setStormworksWireframe(objectRef.value, props.wireframe);
+    };
 
-      if (viewer.value) {
-        viewer.value.dispose();
-        viewer.value = null;
-      }
-    });
+    createObject();
 
     watch(
-      () => props.objects,
-      (objects) => {
-        if (viewer.value) {
-          viewer.value.applyObjectStates(objects);
+      () => props.data,
+      () => {
+        createObject();
+      },
+    );
+
+    watch(
+      () => props.materials,
+      () => {
+        createObject();
+      },
+    );
+
+    watch(
+      () => props.name,
+      (name) => {
+        if (objectRef.value) {
+          objectRef.value.name = name;
+        }
+      },
+    );
+
+    watch(
+      () => props.visible,
+      (visible) => {
+        if (objectRef.value) {
+          objectRef.value.visible = visible;
+        }
+      },
+    );
+
+    watch(
+      () => props.wireframe,
+      (wireframe) => {
+        if (objectRef.value) {
+          setStormworksWireframe(objectRef.value, wireframe);
+        }
+      },
+    );
+
+    watch(
+      () => props.uniforms,
+      (uniforms) => {
+        const materials = activeMaterials.value;
+        if (materials) {
+          applyStormworksUniforms(materials, uniforms);
         }
       },
       { deep: true },
     );
 
-    watch(
-      () => props.backgroundColor,
-      (value) => {
-        if (viewer.value) {
-          viewer.value.setBackgroundColor(value ?? null);
-        }
-      },
-    );
+    onBeforeUnmount(() => {
+      disposeCurrentObject();
+      objectRef.value = null;
+      ownedMaterialsRef.value = null;
+      objectOwnsMaterialsRef.value = false;
+    });
 
-    return () =>
-      h("div", { ref: containerRef, class: "sw-mesh-viewer", style: viewerRootStyle }, [
-        h("canvas", {
-          ref: canvasRef,
-          class: "sw-mesh-viewer__canvas",
-          style: viewerCanvasStyle,
-        }),
-      ]);
+    expose({
+      object: objectRef,
+      getObject: () => objectRef.value,
+    });
+
+    return () => {
+      const object = objectRef.value;
+      return object ? h("primitive", { object }) : null;
+    };
   },
 });
 
-const viewerRootStyle = {
-  width: "100%",
-  height: "100%",
-  minWidth: "0",
-  minHeight: "0",
-};
-
-const viewerCanvasStyle = {
-  display: "block",
-  width: "100%",
-  height: "100%",
-};
+export type {
+  StormworksMaterialSet,
+  StormworksUniforms,
+  StormworksUniformPatch,
+  StormworksUniformValue,
+} from "../viewer";

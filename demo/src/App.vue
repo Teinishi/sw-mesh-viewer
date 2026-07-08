@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { MeshBinaryParser, type MeshData } from "../../src";
-import { Viewer, MeshViewer, type ViewerObjectState } from "../../src/vue";
-
-interface MeshViewerExpose {
-  getViewer: () => Viewer | null;
-}
+import { OrbitControls } from "@tresjs/cientos";
+import { TresCanvas } from "@tresjs/core";
+import { parseMeshData, type MeshData } from "../../src";
+import { createStormworksLightGroup, type StormworksUniforms } from "../../src/viewer";
+import { SwMeshPrimitive } from "../../src/vue";
 
 interface DemoObject {
   id: string;
   name: string;
   size: number;
   kind: MeshData["kind"];
+  data: MeshData;
   visible: boolean;
 }
 
@@ -19,18 +19,27 @@ const backgroundColor = ref<number | null>(0x111827);
 const objects = ref<DemoObject[]>([]);
 const isDragging = ref(false);
 const errorMessage = ref("");
-const meshViewerRef = ref<MeshViewerExpose | null>(null);
-
-const viewerObjects = computed<ViewerObjectState[]>(() =>
-  objects.value.map((object) => ({
-    id: object.id,
-    visible: object.visible,
-  })),
-);
+const wireframe = ref(false);
+const objectColor = ref("#ffffff");
+const lightGroup = createStormworksLightGroup();
 
 const visibleCount = computed(() => objects.value.filter((object) => object.visible).length);
+const canvasClearColor = computed(() => backgroundColor.value ?? "transparent");
+const objectColorVec4 = computed<[number, number, number, number]>(() => [
+  parseInt(objectColor.value.slice(1, 3), 16) / 255,
+  parseInt(objectColor.value.slice(3, 5), 16) / 255,
+  parseInt(objectColor.value.slice(5, 7), 16) / 255,
+  1,
+]);
 
-const getViewer = () => meshViewerRef.value?.getViewer() ?? null;
+const uniforms = computed<StormworksUniforms>(() => ({
+  opaque: {
+    overrideColor: { type: "int", value: 1 },
+    overrideColor1: { type: "vec4", value: objectColorVec4.value },
+    overrideColor2: { type: "vec4", value: objectColorVec4.value },
+    overrideColor3: { type: "vec4", value: objectColorVec4.value },
+  },
+}));
 
 const toggleBackground = () => {
   backgroundColor.value = backgroundColor.value === null ? 0x111827 : null;
@@ -38,6 +47,8 @@ const toggleBackground = () => {
 
 const resetView = () => {
   backgroundColor.value = 0x111827;
+  wireframe.value = false;
+  objectColor.value = "#ffffff";
   objects.value = objects.value.map((object) => ({ ...object, visible: true }));
   errorMessage.value = "";
 };
@@ -47,24 +58,18 @@ const addFiles = async (fileList: FileList | File[]) => {
   const files = Array.from(fileList);
   if (files.length === 0) return;
 
-  const parser = new MeshBinaryParser();
   const loaded: DemoObject[] = [];
   const failed: string[] = [];
-  const viewer = getViewer();
 
   for (const file of files) {
     try {
-      const data = parser.parse(await file.arrayBuffer());
-      const id = `object-${idCounter++}`;
-      viewer?.addObject(id, data, {
-        name: file.name,
-        visible: true,
-      });
+      const data = parseMeshData(await file.arrayBuffer());
       loaded.push({
-        id,
+        id: `object-${idCounter++}`,
         name: file.name,
         size: file.size,
         kind: data.kind,
+        data,
         visible: true,
       });
     } catch (error) {
@@ -74,8 +79,7 @@ const addFiles = async (fileList: FileList | File[]) => {
   }
 
   objects.value = [...objects.value, ...loaded];
-  errorMessage.value =
-    failed.length > 0 ? `読み込めないファイルがありました: ${failed.join(", ")}` : "";
+  errorMessage.value = failed.length > 0 ? `Could not read these files: ${failed.join(", ")}` : "";
 };
 
 const handleDrop = async (event: DragEvent) => {
@@ -90,12 +94,10 @@ const handleFileInput = async (event: Event) => {
 };
 
 const removeObject = (id: string) => {
-  getViewer()?.removeObject(id);
   objects.value = objects.value.filter((object) => object.id !== id);
 };
 
 const clearObjects = () => {
-  getViewer()?.clearObjects();
   objects.value = [];
   errorMessage.value = "";
 };
@@ -113,10 +115,18 @@ const formatBytes = (size: number) => {
       <div class="demo-header">
         <div>
           <h1>SW Mesh Viewer</h1>
-          <p>Right-drag to orbit, scroll to zoom, and middle-drag to pan.</p>
+          <p>TresJS owns the canvas, camera, controls, and scene.</p>
         </div>
 
         <div class="demo-controls">
+          <label class="color-control">
+            <span>Color</span>
+            <input v-model="objectColor" type="color" />
+          </label>
+          <label class="visibility-toggle">
+            <input v-model="wireframe" type="checkbox" />
+            <span>Wireframe</span>
+          </label>
           <button type="button" @click="toggleBackground">Toggle background</button>
           <button type="button" @click="resetView">Reset</button>
         </div>
@@ -156,7 +166,7 @@ const formatBytes = (size: number) => {
               </label>
               <div class="object-list__text">
                 <strong>{{ object.name }}</strong>
-                <span>{{ object.kind }} · {{ formatBytes(object.size) }}</span>
+                <span>{{ object.kind }} / {{ formatBytes(object.size) }}</span>
               </div>
               <button type="button" aria-label="Remove object" @click="removeObject(object.id)">
                 Remove
@@ -168,11 +178,20 @@ const formatBytes = (size: number) => {
         </aside>
 
         <div class="viewer-frame">
-          <MeshViewer
-            ref="meshViewerRef"
-            :objects="viewerObjects"
-            :background-color="backgroundColor"
-          />
+          <TresCanvas :clear-color="canvasClearColor" :alpha="backgroundColor === null">
+            <TresPerspectiveCamera :position="[0, 1.5, 4]" :look-at="[0, 0, 0]" />
+            <OrbitControls />
+            <primitive :object="lightGroup" />
+            <SwMeshPrimitive
+              v-for="object in objects"
+              :key="object.id"
+              :data="object.data"
+              :name="object.name"
+              :uniforms="uniforms"
+              :visible="object.visible"
+              :wireframe="wireframe"
+            />
+          </TresCanvas>
         </div>
       </div>
     </section>
@@ -265,6 +284,24 @@ button:disabled {
 
 button:hover {
   filter: brightness(1.05);
+}
+
+.color-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 0.86rem;
+}
+
+.color-control input {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
 }
 
 .demo-layout {
