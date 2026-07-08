@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { Vector3 } from "three";
 import { OrbitControls } from "@tresjs/cientos";
 import { TresCanvas } from "@tresjs/core";
 import { parseMeshData, type MeshData } from "../../src";
@@ -171,7 +172,7 @@ const formatBytes = (size: number) => {
 
         <div class="viewer-frame">
           <TresCanvas>
-            <TresPerspectiveCamera :position="[0, 1.5, 4]" :look-at="[0, 0, 0]" />
+            <TresPerspectiveCamera :position="new Vector3(0, 1.5, 4)" :look-at="[0, 0, 0]" />
             <OrbitControls />
             <primitive :object="lightGroup" />
             <SwMeshPrimitive
