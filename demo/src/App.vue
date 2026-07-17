@@ -190,6 +190,10 @@ const formatBytes = (size: number) => {
               :visible="object.visible"
               :wireframe="wireframe"
             />
+            <TresAxesHelper :args="[10]" />
+            <TresGroup :position="[0.125, 0, 0.125]">
+              <TresGridHelper :args="[10, 40, 0xaaaaaa, 0xaaaaaa]" />
+            </TresGroup>
           </TresCanvas>
         </div>
       </div>
