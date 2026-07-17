@@ -84,13 +84,13 @@ export function createStormworksPhysMeshGroup(
       const offset = index * 3;
       positions[offset] = vertex.x;
       positions[offset + 1] = vertex.y;
-      positions[offset + 2] = vertex.z;
+      positions[offset + 2] = -vertex.z;
     });
 
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setIndex(
       submesh.indices.length > 0
-        ? createReversedTriangleIndices(submesh.indices)
+        ? submesh.indices
         : createFallbackTriangleIndices(submesh.vertices.length),
     );
     geometry.computeVertexNormals();
@@ -118,10 +118,10 @@ export function createStormworksMeshGeometry(mesh: MeshFile): THREE.BufferGeomet
     const offset = index * 3;
     positions[offset] = vertex.position.x;
     positions[offset + 1] = vertex.position.y;
-    positions[offset + 2] = vertex.position.z;
+    positions[offset + 2] = -vertex.position.z;
     normals[offset] = vertex.normal.x;
     normals[offset + 1] = vertex.normal.y;
-    normals[offset + 2] = vertex.normal.z;
+    normals[offset + 2] = -vertex.normal.z;
     colors[offset] = vertex.color.r / 255;
     colors[offset + 1] = vertex.color.g / 255;
     colors[offset + 2] = vertex.color.b / 255;
@@ -130,7 +130,7 @@ export function createStormworksMeshGeometry(mesh: MeshFile): THREE.BufferGeomet
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  geometry.setIndex(createReversedTriangleIndices(mesh.indices));
+  geometry.setIndex(mesh.indices);
   addSubmeshGroups(geometry, mesh);
   geometry.computeBoundingSphere();
 
@@ -138,24 +138,7 @@ export function createStormworksMeshGeometry(mesh: MeshFile): THREE.BufferGeomet
 }
 
 function createFallbackTriangleIndices(vertexCount: number): number[] {
-  return Array.from({ length: vertexCount }, (_, index) => {
-    const remainder = index % 3;
-    if (remainder === 0) return index;
-    if (remainder === 1) return index + 1;
-    return index - 1;
-  });
-}
-
-function createReversedTriangleIndices(indices: number[]): number[] {
-  const reversed = indices.slice();
-
-  for (let i = 0; i + 2 < reversed.length; i += 3) {
-    const next = reversed[i + 1];
-    reversed[i + 1] = reversed[i + 2] ?? next;
-    reversed[i + 2] = next;
-  }
-
-  return reversed;
+  return Array.from({ length: vertexCount }, (_, index) => index);
 }
 
 function addSubmeshGroups(geometry: THREE.BufferGeometry, mesh: MeshFile): void {
