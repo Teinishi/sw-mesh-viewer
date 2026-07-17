@@ -33,13 +33,13 @@ export interface StormworksUniformStores {
 /** Materials and their uniform stores used by Stormworks object creation helpers. */
 export interface StormworksMaterialSet {
   /** Material used for shader id `0` submeshes. */
-  opaque: THREE.Material;
+  opaque: THREE.MeshStandardMaterial;
   /** Material used for shader id `1` submeshes. */
-  glass: THREE.Material;
+  glass: THREE.ShaderMaterial;
   /** Material used for shader id `2` submeshes. */
-  additive: THREE.Material;
+  additive: THREE.MeshBasicMaterial;
   /** Material used for meshes created from `phys` files. */
-  phys: THREE.Material;
+  phys: THREE.MeshLambertMaterial;
   /** Uniform stores attached to this material set. */
   uniforms: StormworksUniformStores;
 }
