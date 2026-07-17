@@ -102,12 +102,15 @@ export function createDefaultGlassUniforms(): StormworksUniformPatch {
 }
 
 /** Create the default opaque material used for shaderId 0 submeshes. */
-export function createOpaqueMaterial(uniforms = createUniformStore(createDefaultOpaqueUniforms())) {
+export function createOpaqueMaterial(
+  uniforms = createUniformStore(createDefaultOpaqueUniforms()),
+  materialParameters?: THREE.MeshStandardMaterialParameters,
+) {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    color: 0xffffff,
     roughness: 1.0,
     metalness: 0.0,
+    ...materialParameters,
   });
 
   material.onBeforeCompile = (shader) => {
@@ -149,7 +152,10 @@ reflectedLight.directDiffuse += diffuseColor.rgb * incidence * distanceFactor * 
 }
 
 /** Create the default glass material used for shaderId 1 submeshes. */
-export function createGlassMaterial(uniforms = createUniformStore(createDefaultGlassUniforms())) {
+export function createGlassMaterial(
+  uniforms = createUniformStore(createDefaultGlassUniforms()),
+  materialParameters?: THREE.ShaderMaterialParameters,
+) {
   return new THREE.ShaderMaterial({
     vertexShader: GLASS_VERTEX_SHADER,
     fragmentShader: GLASS_FRAGMENT_SHADER,
@@ -160,16 +166,21 @@ export function createGlassMaterial(uniforms = createUniformStore(createDefaultG
     blendSrc: THREE.OneFactor,
     blendDst: THREE.OneMinusSrcAlphaFactor,
     blendEquation: THREE.AddEquation,
+    ...materialParameters,
   });
 }
 
 /** Create the default additive material used for shaderId 2 submeshes. */
-export function createAdditiveMaterial(uniforms = createUniformStore()) {
+export function createAdditiveMaterial(
+  uniforms = createUniformStore(),
+  materialParameters?: THREE.MeshBasicMaterialParameters,
+) {
   const material = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
+    ...materialParameters,
   });
 
   material.onBeforeCompile = (shader) => {
@@ -180,8 +191,14 @@ export function createAdditiveMaterial(uniforms = createUniformStore()) {
 }
 
 /** Create the material used for phys files. */
-export function createPhysMaterial(uniforms = createUniformStore()) {
-  const material = new THREE.MeshLambertMaterial({ color: 0xa0a0a0 });
+export function createPhysMaterial(
+  uniforms = createUniformStore(),
+  materialParameters?: THREE.MeshLambertMaterialParameters,
+) {
+  const material = new THREE.MeshLambertMaterial({
+    color: 0xa0a0a0,
+    ...materialParameters,
+  });
 
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
