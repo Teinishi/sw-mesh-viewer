@@ -7,6 +7,8 @@ import { parseMeshData, type MeshData } from "../../src";
 import { createStormworksLightGroup, type StormworksUniforms } from "../../src/viewer";
 import { SwMeshPrimitive } from "../../src/vue";
 
+const GRID_OFFSET = new THREE.Vector3(0.125, 0, 0.125);
+
 interface DemoObject {
   id: string;
   name: string;
@@ -191,7 +193,7 @@ const formatBytes = (size: number) => {
               :wireframe="wireframe"
             />
             <TresAxesHelper :args="[10]" />
-            <TresGroup :position="[0.125, 0, 0.125]">
+            <TresGroup :position="GRID_OFFSET">
               <TresGridHelper :args="[10, 40, 0xaaaaaa, 0xaaaaaa]" />
             </TresGroup>
           </TresCanvas>
