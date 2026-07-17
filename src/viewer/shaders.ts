@@ -131,6 +131,7 @@ if (overrideColor == 1) {
   else if (distance(color.rgb, vec3(0.608, 0.494, 0.0)) < 0.01) vColor = overrideColor2;
   else if (distance(color.rgb, vec3(0.216, 0.494, 0.0)) < 0.01) vColor = overrideColor3;
 }
+vColor.rgb = pow(vColor.rgb, vec3(2.2));
 #endif`,
       );
 
